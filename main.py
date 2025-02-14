@@ -39,8 +39,8 @@ def select_stream(detecter,video_detail) ->str:
             streamsList = detecter.detect_best_streams()
             videoUrl = streamsList[0].url
             audioUrl = streamsList[1].url
-    logging.debug(videoUrl)
-    logging.debug(audioUrl)
+    logging.debug("视频流链接:{videoUrl}")
+    logging.debug("音频流链接:{audioUrl}")
     return videoUrl,audioUrl 
 def download_core(input, video_detail, download_dir, cache_dir, audio_only) ->None:
     if not os.path.exists(download_dir):
