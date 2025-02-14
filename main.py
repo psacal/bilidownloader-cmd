@@ -4,6 +4,7 @@ import click
 from bilibili_api import video,sync
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from utils import *
+from download import Downloader
 # 配置日志
 logging.basicConfig(
     level=logging.INFO,
@@ -19,18 +20,18 @@ def select_stream(detecter,video_detail) ->str:
     codec = config2reality(video_detail["codec"])
     streamsList = detecter.detect()
     streamsListSize = len(streamsList)
-    videoIndex=audioIndex=0
+    videoIndex=audioIndex=None
     if (detecter.check_flv_stream()):
         print('Flv流,无需选择')
         videoUrl = streamsList[0].url
     else:
         for i in range(streamsListSize):
             if type(streamsList[i]).__name__ == 'VideoStreamDownloadURL':
-                        if (streamsList[i].video_quality.name ==  videoQuality and streamsList[i].video_codecs.name == config2reality(codec)):
-                            videoIndex = i
-                        elif type(streamsList[i]).__name__ == 'AudioStreamDownloadURL':
-                            if streamsList[i].audio_quality.name == audioQuality:
-                                audioIndex= i
+                if (streamsList[i].video_quality.name == videoQuality) and (streamsList[i].video_codecs.name == codec):
+                    videoIndex = i
+            elif type(streamsList[i]).__name__ == 'AudioStreamDownloadURL':
+                if streamsList[i].audio_quality.name == audioQuality:
+                    audioIndex = i
         if (videoIndex != None) and (audioIndex != None):
             videoUrl = streamsList[videoIndex].url
             audioUrl = streamsList[audioIndex].url
@@ -43,59 +44,61 @@ def select_stream(detecter,video_detail) ->str:
     logging.debug("音频流链接:{audioUrl}")
     return videoUrl,audioUrl 
 def download_core(input, video_detail, download_dir, cache_dir, audio_only) ->None:
+    downloader = Downloader()
     if not os.path.exists(download_dir):
         os.makedirs(download_dir)
     if not os.path.exists(cache_dir):
         os.makedirs(cache_dir)
-    logging.debug('解析链接')
+
     avid,bvid = extract_avid_bvid(input)
     bvid = check_input(avid,bvid)
     if (bvid == None):
         logging.error("未检测到bvid!请检查输入是否正确")
         return
+    
     download_video = video.Video(bvid=bvid)
     downloadUrlData = sync(download_video.get_download_url(0))
     Detecter = video.VideoDownloadURLDataDetecter(data=downloadUrlData)
     downloadVideoInfo = sync(download_video.get_info())
     downloadVideoName = downloadVideoInfo["title"]
     #mock 如果需要保存其他信息可在此处加入代码
+
     fileName = sanitize_filename(downloadVideoName) + '.mp4' #最终文件名
+    tempFlv = os.path.join(cache_dir,"flv_temp.flv") 
+    tempAudio = os.path.join(cache_dir,"audio_temp.m4s")
+    tempVideo = os.path.join(cache_dir,"video_temp.m4s")
+    output = os.path.join(download_dir,fileName)
+
     videoUrl,audioUrl = select_stream(Detecter,video_detail)
     if Detecter.check_flv_stream():
         logging.info(f"正在下载视频{downloadVideoName} 的Flv文件")
-        download_file(videoUrl,os.path.join(cache_dir,"flv_temp.flv"))
+        download_file(videoUrl,tempFlv)
         logging.debug('混流开始')
-        mix_streams(os.path.join(cache_dir,"flv_temp.flv"),'',os.path.join(download_dir,fileName))
+        mix_streams(tempFlv,'',output)
     else:
         if audio_only:
-            logging.debug("仅下载音频模式")
+            logging.info("仅下载音频模式")
             logging.info(f"正在下载视频 {downloadVideoName} 的音频流")
-            download_file(audioUrl,os.path.join(cache_dir,"audio_temp.m4s"))
+            downloader.download(audioUrl,tempAudio,4,True,HEADERS)
             logging.debug('混流开始')
-            mix_streams('',
-                        os.path.join(cache_dir,"audio_temp.m4s"),
-                        os.path.join(download_dir,fileName))
+            mix_streams('',tempAudio,output)
         else:
             logging.info(f"正在下载视频 {downloadVideoName} 的视频流")
-            download_file(videoUrl,
-                          os.path.join(cache_dir,"video_temp.m4s"))
+            downloader.download(videoUrl,tempVideo,4,True,HEADERS)
             logging.info(f"正在下载视频 {downloadVideoName} 的音频流")
-            download_file(audioUrl,
-                          os.path.join(cache_dir,"audio_temp.m4s"))
+            downloader.download(audioUrl,tempAudio,4,True,HEADERS)
             logging.debug('混流开始')
-            mix_streams(os.path.join(cache_dir,"video_temp.m4s"),
-                        os.path.join(cache_dir,"audio_temp.m4s"),
-                        os.path.join(download_dir,fileName))
+            mix_streams(tempVideo,tempAudio,output)
 
 @click.command()
 @click.argument('input')
 @click.option('--input',default='',help='链接')
-@click.option('--video-quality', default='192K', help='画质')
-@click.option('--audio-quality', default='360P', help='音质')
+@click.option('--video-quality', default='360P', help='画质')
+@click.option('--audio-quality', default='192K', help='音质')
 @click.option('--codec',default='H264',help='编码')
 @click.option('--download-dir', default='.', help='下载目录')
 @click.option('--cache-dir', default='.', help='临时目录')
-@click.option('--audio-only',default=False,help='仅下载音质开关')
+@click.option('--audio-only',default=False,help='仅下载音频开关')
 @click.option("-w", "--max-workers", default=3, help="并发下载数")
 def main(input,video_quality,audio_quality,codec,download_dir,cache_dir,audio_only,max_workers):   
     check_ffmpeg()
@@ -120,7 +123,6 @@ def main(input,video_quality,audio_quality,codec,download_dir,cache_dir,audio_on
             logging.info(f'下载配置:{video_quality},{audio_quality},{codec}')
             download_core(input, video_detail, download_dir, cache_dir, audio_only)
     except Exception as e:
-        print(e)
-        #logging.error(f"程序异常: {str(e)}")
+        logging.error(f"程序发生未知异常: {str(e)}")
 if __name__ == "__main__":
     main()
