@@ -19,8 +19,7 @@ def check_input(avid,bvid) ->str:
         # 如果不存在AV号但存在BV号，则直接返回BV号
         return bvid
     else:
-        # 如果都不存在，则返回无效输入提示
-        logging.error("什么也没有呢")
+        #avid,bvid都没有
         return None
 def extract_avid_bvid(url_or_code:str) -> str:
     '''
