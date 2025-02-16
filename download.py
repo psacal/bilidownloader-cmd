@@ -1,6 +1,7 @@
 import os
 import json
 import time
+import glob
 import hashlib
 import threading
 from tqdm import tqdm
@@ -13,7 +14,7 @@ class Downloader:
         self.lock = threading.Lock()
         self.chunk_size = 1024 * 1024  # 1MB
         self.default_headers = {'User-Agent': 'Mozilla/5.0'}
-        self.temp_prefix = ".dl_temp_"
+        self.temp_prefix = ".dl_"
         self.meta_file = None
         self.session = self._create_retry_session()
 
@@ -32,54 +33,56 @@ class Downloader:
     def download(self, url, file_path, num_threads=4, resume=True, headers=None):
         """主下载方法"""
         try:
-            # 处理路径和目录
+            # 生成唯一任务ID
+            task_id = hashlib.md5(f"{url}_{os.path.abspath(file_path)}".encode()).hexdigest()[:8]
+            base_name = os.path.basename(file_path)
+            unique_prefix = f"{self.temp_prefix}{task_id}_{base_name}"
             file_dir = os.path.dirname(file_path)
+            
+            # 创建目标目录
             if file_dir:
                 os.makedirs(file_dir, exist_ok=True)
             
-            # 合并headers并生成唯一元数据文件名
-            merged_headers = {**self.default_headers, **(headers or {})}
-            base_name = os.path.basename(file_path)
-            self.meta_file = os.path.join(file_dir, f"{self.temp_prefix}{base_name}.meta")
+            # 初始化文件路径
+            self.meta_file = os.path.join(file_dir, f"{unique_prefix}.meta")
+            temp_files = [os.path.join(file_dir, f"{unique_prefix}.part{i}") for i in range(num_threads)]
 
             # 尝试恢复下载
             meta = self._load_metadata()
-            if resume and meta and meta["url"] == url:
-                print("检测到未完成的下载任务，尝试恢复...")
-                return self._resume_download(meta, merged_headers)
+            if resume and meta and meta.get("unique_prefix") == unique_prefix:
+                print(f"恢复任务 [{task_id}]...")
+                return self._resume_download(meta, headers or {})
 
             # 获取文件信息
+            merged_headers = {**self.default_headers, **(headers or {})}
             file_size, accept_ranges, etag = self._get_file_info(url, merged_headers)
             if not accept_ranges:
                 num_threads = 1
 
-            # 生成临时文件路径
-            temp_files = [
-                os.path.join(file_dir, f"{self.temp_prefix}{base_name}.part{i}") 
-                for i in range(num_threads)
-            ]
-
-            # 明确生成chunks
+            # 生成分块信息
             chunks = self._split_chunks(file_size, num_threads)
 
             # 保存元数据
             self._save_metadata({
+                "unique_prefix": unique_prefix,
                 "url": url,
-                "file_path": file_path,
+                "file_path": os.path.abspath(file_path),
                 "headers": merged_headers,
-                "chunks": chunks,  # 使用当前生成的chunks
+                "chunks": chunks,
                 "etag": etag,
                 "temp_files": temp_files,
                 "timestamp": time.time()
             })
 
-            with tqdm(total=file_size, unit='B', unit_scale=True) as pbar:
+            # 开始下载
+            with tqdm(total=file_size, unit='B', unit_scale=True, desc=base_name) as pbar:
                 if accept_ranges and num_threads > 1:
                     self._download_chunks(url, temp_files, pbar, resume, merged_headers)
-                    self._merge_files(temp_files, file_path, chunks)  # 传递当前chunks
+                    self._merge_files(temp_files, file_path, chunks)
                 else:
                     self._download_single(url, file_path, pbar, resume, merged_headers)
 
+            # 清理并验证
             self._cleanup()
             self._verify_integrity(url, file_path, merged_headers)
 
@@ -90,9 +93,11 @@ class Downloader:
 
     def _resume_download(self, meta, new_headers):
         """恢复下载流程"""
-        if "chunks" not in meta:
-            raise ValueError("元数据缺少分块信息")
-        
+        # 验证元数据完整性
+        required_keys = ["unique_prefix", "url", "file_path", "chunks", "etag", "temp_files"]
+        if any(key not in meta for key in required_keys):
+            raise ValueError("元数据损坏，无法恢复下载")
+
         # 验证服务器文件是否变更
         current_size, _, new_etag = self._get_file_info(meta["url"], meta["headers"])
         if meta["etag"] != new_etag or meta["chunks"][-1][1] + 1 != current_size:
@@ -101,7 +106,7 @@ class Downloader:
         # 显示恢复进度
         downloaded = sum(os.path.getsize(f) for f in meta["temp_files"] if os.path.exists(f))
         
-        with tqdm(total=current_size, initial=downloaded, unit='B', unit_scale=True) as pbar:
+        with tqdm(total=current_size, initial=downloaded, unit='B', unit_scale=True, desc=os.path.basename(meta["file_path"])) as pbar:
             self._download_chunks(
                 meta["url"], 
                 meta["temp_files"],
@@ -114,7 +119,7 @@ class Downloader:
             self._verify_integrity(meta["url"], meta["file_path"], meta["headers"])
 
     def _get_file_info(self, url, headers):
-        """获取文件信息"""
+        """获取文件元信息"""
         resp = self.session.head(url, headers=headers)
         resp.raise_for_status()
         return (
@@ -157,12 +162,12 @@ class Downloader:
 
     def _download_range(self, url, start, end, temp_file, pbar, headers):
         """范围下载"""
-        # 确保临时文件目录存在
+        # 确保目录存在
         temp_dir = os.path.dirname(temp_file)
         if temp_dir:
             os.makedirs(temp_dir, exist_ok=True)
         
-        # 复制headers并设置Range
+        # 设置请求头
         req_headers = headers.copy()
         if start < end:
             req_headers['Range'] = f'bytes={start}-{end}'
@@ -179,6 +184,7 @@ class Downloader:
                             pbar.update(len(data))
         except Exception as e:
             self._save_metadata()  # 异常时保存进度
+            print(f"发生以下错误 {e}")
             raise
 
     def _download_single(self, url, file_path, pbar, resume, headers):
@@ -202,23 +208,19 @@ class Downloader:
 
     def _merge_files(self, temp_files, file_path, chunks):
         """合并临时文件"""
-        if chunks is None:
-            raise ValueError("分块信息缺失，无法验证临时文件完整性")
+        # 防御性校验
+        if not chunks or len(temp_files) != len(chunks):
+            raise ValueError("无效的分块信息")
         
-        if len(temp_files) != len(chunks):
-            raise ValueError(f"临时文件数量({len(temp_files)})与分块数({len(chunks)})不匹配")
-
-        # 验证临时文件完整性
+        # 验证临时文件
         for i, temp_file in enumerate(temp_files):
             if not os.path.exists(temp_file):
                 raise FileNotFoundError(f"临时文件缺失: {temp_file}")
             
             actual_size = os.path.getsize(temp_file)
-            start, end = chunks[i]
-            expected_size = end - start + 1
-            
+            expected_size = chunks[i][1] - chunks[i][0] + 1
             if actual_size != expected_size:
-                raise ValueError(f"临时文件损坏: {temp_file} 预期大小{expected_size}, 实际{actual_size}")
+                raise ValueError(f"文件分块损坏: {temp_file} (预期 {expected_size}B, 实际 {actual_size}B)")
 
         # 执行合并
         with open(file_path, 'wb') as f:
@@ -228,20 +230,20 @@ class Downloader:
                 os.remove(temp_file)
 
     def _verify_integrity(self, url, file_path, headers):
-        """增强版完整性校验"""
-        # 获取服务器最新信息
-        actual_size = os.path.getsize(file_path)
-        expected_size, _, etag = self._get_file_info(url, headers)
+        """完整性校验"""
+        # 获取服务器信息
+        server_size, _, etag = self._get_file_info(url, headers)
+        local_size = os.path.getsize(file_path)
         
         # 大小校验
-        if actual_size != expected_size:
+        if local_size != server_size:
             os.remove(file_path)
-            raise ValueError(f"文件大小不匹配: 预期{expected_size}字节, 实际{actual_size}字节")
+            raise ValueError(f"文件大小不匹配 (服务器: {server_size}B, 本地: {local_size}B)")
 
-        print(f"完整性校验通过，文件大小: {actual_size/1024/1024:.2f}MB")
+        print(f"验证通过: {local_size/1024/1024:.2f} MB")
 
-    def _calculate_file_hash(self, file_path, algorithm='md5', block_size=4096):
-        """计算本地文件哈希值"""
+    def _calculate_hash(self, file_path, algorithm='md5', block_size=4096):
+        """计算文件哈希值"""
         hasher = hashlib.new(algorithm)
         with open(file_path, 'rb') as f:
             while chunk := f.read(block_size):
@@ -250,37 +252,40 @@ class Downloader:
 
     def _save_metadata(self, data=None):
         """保存元数据"""
-        if data:
-            # 确保保存完整的chunks信息
-            data["chunks"] = [tuple(c) for c in data["chunks"]]  # 转换为可序列化格式
+        if data and self.meta_file:
+            data["chunks"] = [list(c) for c in data["chunks"]]  # 转换为可序列化格式
             with open(self.meta_file, 'w') as f:
                 json.dump(data, f, indent=2)
 
     def _load_metadata(self):
         """加载元数据"""
-        if os.path.exists(self.meta_file):
-            with open(self.meta_file, 'r') as f:
-                return json.load(f)
+        if self.meta_file and os.path.exists(self.meta_file):
+            try:
+                with open(self.meta_file, 'r') as f:
+                    data = json.load(f)
+                data["chunks"] = [tuple(c) for c in data["chunks"]]  # 转换回元组
+                return data
+            except:
+                pass
         return None
 
     def _cleanup(self, keep_meta=False):
         """清理临时文件"""
-        if self.meta_file and os.path.exists(self.meta_file) and not keep_meta:
-            os.remove(self.meta_file)
+        if self.meta_file and os.path.exists(self.meta_file):
+            try:
+                # 读取元数据获取唯一前缀
+                with open(self.meta_file, 'r') as f:
+                    meta = json.load(f)
+                prefix = meta["unique_prefix"]
+                dir_path = os.path.dirname(self.meta_file)
+                
+                # 删除所有相关文件
+                for f in glob.glob(os.path.join(dir_path, f"{prefix}*")):
+                    os.remove(f)
+            except Exception as e:
+                print(f"清理失败: {str(e)}")
 
-# 使用示例
 if __name__ == "__main__":
-    downloader = Downloader()
-    try:
-        downloader.download(
-            url="https://example.com/video.mp4",
-            file_path="./videos/video.mp4",
-            num_threads=4,
-            resume=True,
-            headers={
-                'Authorization': 'Bearer xyz123',
-                'Custom-Header': 'value'
-            }
-        )
-    except KeyboardInterrupt:
-        print("\n下载已中断，下次运行将自动恢复")
+    d=Downloader()
+    d.download("https://i-582.wwentua.com:446/01251900219514865bb/2025/01/22/31fc737bff768597a71a9842fa27f036.zip?st=PbLKmfrrLkLRY4s8D2BPVA&e=1737806766&b=AQFZFVQXVCNQZFBgCy9UDwEQDCJUMARlADwAf1UzAiAGIgo7AixTZlgjVzQKvAazAt5Z4FbbAZEGs1zKU_bsF4QHeWftUslTHUIJQ4gvgVOYBegwqVDwEcg_c_c&fi=219514865&pid=119-2-194-240&up=2&mp=0&co=0",
+               "b.zip")

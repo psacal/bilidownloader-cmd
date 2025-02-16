@@ -17,7 +17,7 @@ logging.basicConfig(
 @click.group()
 def cli():
     pass
-def select_stream(detecter,video_detail) ->str:
+def select_stream(detecter:video.VideoDownloadURLDataDetecter,video_detail) ->str:
     videoQuality = config2reality(video_detail["video_quality"])
     audioQuality = config2reality(video_detail["audio_quality"])
     codec = config2reality(video_detail["codec"])
