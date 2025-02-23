@@ -13,3 +13,4 @@ class DownloadConfig:
     cache_dir: str
     audio_only: bool
     max_workers: int
+    threads: int

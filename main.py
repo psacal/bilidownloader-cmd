@@ -5,6 +5,7 @@ from bilibili_api import video,sync
 from utils import *
 from download import Downloader
 from model import DownloadConfig,VideoConfig
+from param_help import *
 
 # 配置日志
 logging.basicConfig(
@@ -15,9 +16,7 @@ logging.basicConfig(
         logging.StreamHandler()
     ]
 )
-@click.group()
-def cli():
-    pass
+
 def select_stream(detecter:video.VideoDownloadURLDataDetecter, video_config: VideoConfig) ->str:
     videoQuality = config2reality(video_config.video_quality)
     audioQuality = config2reality(video_config.audio_quality)
@@ -74,6 +73,7 @@ def download_core(input, config: DownloadConfig) ->None:
     output = os.path.join(config.download_dir,fileName)
 
     videoUrl,audioUrl = select_stream(Detecter, config.video_config)
+
     if Detecter.check_flv_stream():
         logging.info(f"正在下载视频{downloadVideoName} 的Flv文件")
         download_file(videoUrl,tempFlv)
@@ -83,27 +83,28 @@ def download_core(input, config: DownloadConfig) ->None:
         if config.audio_only:
             logging.info("仅下载音频模式")
             logging.info(f"正在下载视频 {downloadVideoName} 的音频流")
-            downloader.download(audioUrl,tempAudio,4,True,HEADERS)
+            downloader.download(audioUrl,tempAudio,config.threads,True,HEADERS)
             logging.debug('混流开始')
             mix_streams('',tempAudio,output)
         else:
             logging.info(f"正在下载视频 {downloadVideoName} 的视频流")
-            downloader.download(videoUrl,tempVideo,4,True,HEADERS)
+            downloader.download(videoUrl,tempVideo,config.threads,True,HEADERS)
             logging.info(f"正在下载视频 {downloadVideoName} 的音频流")
-            downloader.download(audioUrl,tempAudio,4,True,HEADERS)
+            downloader.download(audioUrl,tempAudio,config.threads,True,HEADERS)
             logging.debug('混流开始')
             mix_streams(tempVideo,tempAudio,output)
             
-@cli.command()
-@click.option('--input',default='',help='链接')
-@click.option('--video-quality', default='360P', help='画质')
-@click.option('--audio-quality', default='192K', help='音质')
-@click.option('--codec',default='H264',help='编码')
-@click.option('--download-dir', default='.', help='下载目录')
-@click.option('--cache-dir', default='.', help='临时目录')
-@click.option('--audio-only',default=False,help='仅下载音频开关')
-@click.option("-w", "--max-workers", default=3, help="并发下载数")
-def download(input,video_quality,audio_quality,codec,download_dir,cache_dir,audio_only,max_workers):   
+@click.command
+@click.option('--input',default='',help=inputHelp)
+@click.option('--video-quality', default='360P', help=videoQualityHelp)
+@click.option('--audio-quality', default='192K', help=audioQualityHelp)
+@click.option('--codec',default='H264',help=codecHelp)
+@click.option('--download-dir', default='.', help=downloadDirHelp)
+@click.option('--cache-dir', default='.', help=cacheDirHelp)
+@click.option('--audio-only',default=False,help=audioOnlyHelp)
+@click.option("-w", "--max-workers", default=3, help=maxWorkersHelp)
+@click.option('-threads',default=4,help=threadsHelp)
+def download(input,video_quality,audio_quality,codec,download_dir,cache_dir,audio_only,max_workers,threads):   
     check_ffmpeg()
     video_config = VideoConfig(
         video_quality=video_quality,
@@ -115,7 +116,8 @@ def download(input,video_quality,audio_quality,codec,download_dir,cache_dir,audi
         download_dir=download_dir,
         cache_dir=cache_dir,
         audio_only=audio_only,
-        max_workers=max_workers
+        max_workers=max_workers,
+        threads = threads
     )
     try:
         logging.info(f'下载配置:{config}')
@@ -123,4 +125,4 @@ def download(input,video_quality,audio_quality,codec,download_dir,cache_dir,audi
     except Exception as e:
         logging.error(f"程序发生未知异常: {str(e)}")
 if __name__ == "__main__":
-    cli()
+    download()
