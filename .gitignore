@@ -2,4 +2,4 @@ test.txt
 /__pycache__
 download.log
 *.mp4
-download_old.py
+*.log

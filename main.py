@@ -2,9 +2,10 @@ import os
 import logging
 import click
 from bilibili_api import video,sync
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from utils import *
 from download import Downloader
+from model import DownloadConfig,VideoConfig
+
 # 配置日志
 logging.basicConfig(
     level=logging.INFO,
@@ -17,10 +18,10 @@ logging.basicConfig(
 @click.group()
 def cli():
     pass
-def select_stream(detecter:video.VideoDownloadURLDataDetecter,video_detail) ->str:
-    videoQuality = config2reality(video_detail["video_quality"])
-    audioQuality = config2reality(video_detail["audio_quality"])
-    codec = config2reality(video_detail["codec"])
+def select_stream(detecter:video.VideoDownloadURLDataDetecter, video_config: VideoConfig) ->str:
+    videoQuality = config2reality(video_config.video_quality)
+    audioQuality = config2reality(video_config.audio_quality)
+    codec = config2reality(video_config.codec)
     streamsList = detecter.detect()
     streamsListSize = len(streamsList)
     videoIndex=audioIndex=None
@@ -46,12 +47,12 @@ def select_stream(detecter:video.VideoDownloadURLDataDetecter,video_detail) ->st
     logging.debug("视频流链接:{videoUrl}")
     logging.debug("音频流链接:{audioUrl}")
     return videoUrl,audioUrl 
-def download_core(input, video_detail, download_dir, cache_dir, audio_only) ->None:
+def download_core(input, config: DownloadConfig) ->None:
     downloader = Downloader()
-    if not os.path.exists(download_dir):
-        os.makedirs(download_dir)
-    if not os.path.exists(cache_dir):
-        os.makedirs(cache_dir)
+    if not os.path.exists(config.download_dir):
+        os.makedirs(config.download_dir)
+    if not os.path.exists(config.cache_dir):
+        os.makedirs(config.cache_dir)
 
     avid,bvid = extract_avid_bvid(input)
     bvid = check_input(avid,bvid)
@@ -66,20 +67,20 @@ def download_core(input, video_detail, download_dir, cache_dir, audio_only) ->No
     downloadVideoName = downloadVideoInfo["title"]
     #mock 如果需要保存其他信息可在此处加入代码
 
-    fileName = sanitize_filename(downloadVideoName) + '.mp4' #最终文件名
-    tempFlv = os.path.join(cache_dir,"flv_temp.flv") 
-    tempAudio = os.path.join(cache_dir,"audio_temp.m4s")
-    tempVideo = os.path.join(cache_dir,"video_temp.m4s")
-    output = os.path.join(download_dir,fileName)
+    fileName = sanitize_filename(downloadVideoName) + '.mp4'
+    tempFlv = os.path.join(config.cache_dir,"flv_temp.flv") 
+    tempAudio = os.path.join(config.cache_dir,"audio_temp.m4s")
+    tempVideo = os.path.join(config.cache_dir,"video_temp.m4s")
+    output = os.path.join(config.download_dir,fileName)
 
-    videoUrl,audioUrl = select_stream(Detecter,video_detail)
+    videoUrl,audioUrl = select_stream(Detecter, config.video_config)
     if Detecter.check_flv_stream():
         logging.info(f"正在下载视频{downloadVideoName} 的Flv文件")
         download_file(videoUrl,tempFlv)
         logging.debug('混流开始')
         mix_streams(tempFlv,'',output)
     else:
-        if audio_only:
+        if config.audio_only:
             logging.info("仅下载音频模式")
             logging.info(f"正在下载视频 {downloadVideoName} 的音频流")
             downloader.download(audioUrl,tempAudio,4,True,HEADERS)
@@ -92,7 +93,7 @@ def download_core(input, video_detail, download_dir, cache_dir, audio_only) ->No
             downloader.download(audioUrl,tempAudio,4,True,HEADERS)
             logging.debug('混流开始')
             mix_streams(tempVideo,tempAudio,output)
-
+            
 @cli.command()
 @click.option('--input',default='',help='链接')
 @click.option('--video-quality', default='360P', help='画质')
@@ -104,14 +105,21 @@ def download_core(input, video_detail, download_dir, cache_dir, audio_only) ->No
 @click.option("-w", "--max-workers", default=3, help="并发下载数")
 def download(input,video_quality,audio_quality,codec,download_dir,cache_dir,audio_only,max_workers):   
     check_ffmpeg()
-    video_detail = {
-                "video_quality":video_quality,
-                "audio_quality":audio_quality,
-                'codec':codec
-            }
+    video_config = VideoConfig(
+        video_quality=video_quality,
+        audio_quality=audio_quality,
+        codec=codec
+    )
+    config = DownloadConfig(
+        video_config=video_config,
+        download_dir=download_dir,
+        cache_dir=cache_dir,
+        audio_only=audio_only,
+        max_workers=max_workers
+    )
     try:
-        logging.info(f'下载配置:{video_quality},{audio_quality},{codec}')
-        download_core(input, video_detail, download_dir, cache_dir, audio_only)
+        logging.info(f'下载配置:{config}')
+        download_core(input, config)
     except Exception as e:
         logging.error(f"程序发生未知异常: {str(e)}")
 if __name__ == "__main__":
