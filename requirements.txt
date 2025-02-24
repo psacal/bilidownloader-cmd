@@ -1,0 +1,9 @@
+# 核心依赖包
+click>=8.0.0
+flask>=2.0.0
+requests>=2.26.0
+tqdm>=4.62.0
+bilibili-api>=9.0.0
+
+# 类型提示支持
+typing>=3.7.4
