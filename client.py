@@ -2,8 +2,9 @@ import os
 import logging
 import click
 import requests
-from utils import check_ffmpeg
+from utils import check_ffmpeg,extract_bvid
 from models import VideoConfig, DownloadConfig, DownloadTask
+from config import get_client_config
 from param_help import *
 
 # 配置日志
@@ -131,42 +132,59 @@ def cli():
     pass
 
 @cli.command()
+@click.option('--config', default='config.yaml', help='配置文件路径')
 @click.option('--input',default='',help=inputHelp)
-@click.option('--video-quality', default='360P', help=videoQualityHelp)
-@click.option('--audio-quality', default='192K', help=audioQualityHelp)
-@click.option('--codec',default='H264',help=codecHelp)
-@click.option('--download-dir', default='.', help=downloadDirHelp)
-@click.option('--cache-dir', default='.', help=cacheDirHelp)
-@click.option('--audio-only',default=False,help=audioOnlyHelp)
-@click.option('--server-url', default=SERVER_URL, help=f'服务器地址,默认为{SERVER_URL}')
-@click.option('--threads',default=4,help=threadsHelp)
-def download(input, video_quality, audio_quality, codec, download_dir, cache_dir, audio_only, server_url, threads):   
+@click.option('--video-quality', default=None, help=videoQualityHelp)
+@click.option('--audio-quality', default=None, help=audioQualityHelp)
+@click.option('--codec',default=None,help=codecHelp)
+@click.option('--download-dir', default=None, help=downloadDirHelp)
+@click.option('--cache-dir', default=None, help=cacheDirHelp)
+@click.option('--audio-only',default=None,help=audioOnlyHelp)
+@click.option('--server-url', default=None, help=f'服务器地址')
+@click.option('--threads',default=None,help=threadsHelp)
+def download(config, input, video_quality, audio_quality, codec, download_dir, cache_dir, audio_only, server_url, threads):   
     """下载视频"""
     check_ffmpeg()
     
-    if not input:
-        logging.error("请提供下载链接")
+    # 加载配置文件
+    client_config = get_client_config(config)
+    
+    # 命令行参数优先级高于配置文件
+    final_video_quality = video_quality or client_config['video_quality']
+    final_audio_quality = audio_quality or client_config['audio_quality']
+    final_codec = codec or client_config['codec']
+    final_download_dir = download_dir or client_config['download_dir']
+    final_cache_dir = cache_dir or client_config['cache_dir']
+    final_audio_only = audio_only if audio_only is not None else client_config['audio_only']
+    final_server_url = server_url or client_config['server_url']
+    final_threads = threads or client_config['threads']
+    
+    bvid=extract_bvid(input)
+    logging.info(f"BV号:{bvid}")
+    if bvid == None:
+        logging.error("请提供下载链接/下载链接格式不正确")
+        logging.info(inputHelp)
         return
-
+    
     try:
         video_config = VideoConfig(
-            video_quality=video_quality,
-            audio_quality=audio_quality,
-            codec=codec,
-            audio_only=audio_only
+            video_quality=final_video_quality,
+            audio_quality=final_audio_quality,
+            codec=final_codec,
+            audio_only=final_audio_only
         )
         
         download_config = DownloadConfig(
-            download_dir=download_dir,
-            cache_dir=cache_dir,
-            server_url=server_url,
-            threads=threads
+            download_dir=final_download_dir,
+            cache_dir=final_cache_dir,
+            server_url=final_server_url,
+            threads=final_threads
         )
 
         task_id = process_single_download(input, video_config, download_config)
         if task_id:
-            print(f"任务已添加，任务ID: {task_id}")
-            print("使用 'python client.py status <task_id>' 查看任务状态")
+            logging.info(f"任务已添加，任务ID: {task_id}")
+            logging.info("使用 'python client.py status <task_id>' 查看任务状态")
             
     except Exception as e:
         logging.error(f"程序发生未知异常: {str(e)}")

@@ -8,45 +8,51 @@ import subprocess
 import bilibili_api
 from bilibili_api import HEADERS
 
-def check_input(avid,bvid) ->str:
-    if avid and bvid:
-        # 如果同时存在AV号和BV号，则报错
-        logging.error("请勿同时输入AV号与BV号")
-    elif avid:
-        # 为AV号则转为BV号 注意此处aid2bvid传入int返回str
-        bvid = bilibili_api.aid2bvid(int(avid))
-        return bvid
-    elif bvid:
-        # 如果不存在AV号但存在BV号，则直接返回BV号
-        return bvid
-    else:
-        #avid,bvid都没有
+def extract_bvid(url_or_code: str) -> str:
+    '''
+    从输入中提取BV号，支持以下格式：
+    1. 纯数字（作为AV号处理）
+    2. 以av/AV开头的AV号
+    3. 以BV/bv开头的BV号
+    返回：
+        str: 标准化的BV号
+        None: 输入格式不正确
+    '''
+    if not url_or_code:
         return None
-
-def extract_avid_bvid(url_or_code:str) -> str:
-    '''
-        从输入中分离avid,bvid
-    '''
+        
+    # 匹配模式
     avid_pattern = re.compile(r'[aA][vV](\d+)')
-    bvid_pattern = re.compile(r'[bB][vV][\d\w]+')
+    bvid_pattern = re.compile(r'[bB][vV][0-9A-Za-z]{10}$')
     number_pattern = re.compile(r'^\d+$')
+    
+    # 尝试匹配AV号
     avid_match = avid_pattern.search(url_or_code)
+    if avid_match:
+        try:
+            return bilibili_api.aid2bvid(int(avid_match.group(1)))
+        except ValueError:
+            logging.error("AV号格式不正确")
+            return None
+            
+    # 尝试匹配BV号
     bvid_match = bvid_pattern.search(url_or_code)
-    number_match = number_pattern.search(url_or_code)
-    avid = avid_match.group(1) if avid_match else None
-    bvid = bvid_match.group(0) if bvid_match else None
-    number = number_match.group(0) if number_match else None
-    if avid == None and bvid == None:
-        if number_match :
-            avid = number
-    if bvid != None:
+    if bvid_match:
+        bvid = bvid_match.group(0)
         if bvid.startswith(('Bv', 'bV', 'bv')):
-        # 将前缀统一改为 BV，并连接上后面的字符串
             return 'BV' + bvid[2:]
-        else:
-            # 如果输入不符合条件，直接返回原字符串
-            return avid,bvid
-    return avid, bvid
+        return bvid
+        
+    # 尝试匹配纯数字（作为AV号处理）
+    number_match = number_pattern.search(url_or_code)
+    if number_match:
+        try:
+            return bilibili_api.aid2bvid(int(number_match.group(0)))
+        except ValueError:
+            logging.error("AV号格式不正确")
+            return None
+            
+    return None
 
 def config2reality(str) -> str :
     qualityOfVideoAndAudio = {

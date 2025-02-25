@@ -5,6 +5,7 @@ from utils import *
 from download import Downloader
 from models import DownloadTask, VideoConfig, DownloadConfig
 from task_manager import TaskManager
+from config import get_server_config
 import click
 import threading
 import asyncio
@@ -193,12 +194,19 @@ def resume_task(task_id):
     return jsonify({"status": "error", "message": "无法恢复任务"}), 400
 
 @click.command()
-@click.option('--host', default='0.0.0.0', help='服务器监听地址')
-@click.option('--port', default=5000, help='服务器监听端口')
-def run_server(host, port):
+@click.option('--host', default=None, help='服务器监听地址')
+@click.option('--port', default=None, help='服务器监听端口')
+@click.option('--config', default='config.yaml', help='配置文件路径')
+def run_server(host, port, config):
     """启动下载服务器"""
-    logging.info(f"服务器启动于 {host}:{port}")
-    app.run(host=host, port=port)
+    server_config = get_server_config(config)
+    
+    # 命令行参数优先级高于配置文件
+    final_host = host or server_config['host']
+    final_port = port or server_config['port']
+    
+    logging.info(f"服务器启动于 {final_host}:{final_port}")
+    app.run(host=final_host, port=final_port)
 
 if __name__ == "__main__":
     run_server()

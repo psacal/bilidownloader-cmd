@@ -1,0 +1,12 @@
+client:
+  audio_only: false
+  audio_quality: 192K
+  cache_dir: .
+  codec: H264
+  download_dir: .
+  server_url: http://localhost:5000
+  threads: 4
+  video_quality: 360P
+server:
+  host: 0.0.0.0
+  port: 5000
