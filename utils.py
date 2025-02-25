@@ -1,12 +1,13 @@
 import re
 import os
 import logging
-import requests
-from tqdm import tqdm
+import aiohttp
+import asyncio
 import ffmpeg
 import subprocess
 import bilibili_api
 from bilibili_api import HEADERS
+
 def check_input(avid,bvid) ->str:
     if avid and bvid:
         # 如果同时存在AV号和BV号，则报错
@@ -21,6 +22,7 @@ def check_input(avid,bvid) ->str:
     else:
         #avid,bvid都没有
         return None
+
 def extract_avid_bvid(url_or_code:str) -> str:
     '''
         从输入中分离avid,bvid
@@ -45,6 +47,7 @@ def extract_avid_bvid(url_or_code:str) -> str:
             # 如果输入不符合条件，直接返回原字符串
             return avid,bvid
     return avid, bvid
+
 def config2reality(str) -> str :
     qualityOfVideoAndAudio = {
         #视频清晰度
@@ -84,44 +87,56 @@ def sanitize_filename(filename: str) -> str:
     sanitized = re.sub(r'_+', '_', sanitized).strip('_').strip()
     return sanitized[:200] if sanitized else "untitled"
 
-def download_file(url: str, path: str) -> None:
-    response = requests.get(url, stream=True,headers=HEADERS)
-    total_size = int(response.headers.get("content-length", 0))
-    block_size = 1024
-    progress_bar = tqdm(total=total_size, unit="iB", unit_scale=True)
-    with open(path, "wb") as f:
-        for data in response.iter_content(block_size):
-            progress_bar.update(len(data))
-            f.write(data)
-    progress_bar.close()
+async def download_file(url: str, path: str) -> None:
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url, headers=HEADERS) as response:
+            total_size = int(response.headers.get("content-length", 0))
+            block_size = 1024 * 1024  # 使用更大的块大小
+            progress_bar = tqdm(total=total_size, unit="iB", unit_scale=True)
+            
+            with open(path, "wb") as f:
+                async for chunk in response.content.iter_chunked(block_size):
+                    progress_bar.update(len(chunk))
+                    f.write(chunk)
+            progress_bar.close()
 
-def mix_streams(videoPath='',audioPath='',outputPath='') ->None:
+async def mix_streams(videoPath='', audioPath='', outputPath='') -> None:
     '''
         混流
-
-        参数：
-        videoPath:临时视频流路径(含文件名)
-        audioPath:临时音频流路径(含文件名)
-        outputPath:成品路径(含文件名)
     '''
-    if (audioPath != '' and videoPath != ''):
-        #视频，音频流都存在，即mp4
-        audioStream = ffmpeg.input(audioPath)
-        videoStream = ffmpeg.input(videoPath)
-        outputStream = ffmpeg.output(audioStream, videoStream, outputPath, acodec='copy', vcodec='copy',loglevel='info')
-        ffmpeg.run(outputStream)
-        os.remove(videoPath)
-        os.remove(audioPath)
-    elif (audioPath == '' and videoPath != ''):
-        #音频视频流，即flv
-        inputStream = ffmpeg.input(videoPath)
-        outputStream = ffmpeg.output(inputStream, outputPath, vcodec='libx264', loglevel='info')
-        ffmpeg.run(outputStream)
-        os.remove(videoPath)
-    elif (audioPath != '' and videoPath == ''):
-        #音频流转mp3
-        inputStream = ffmpeg.input(audioPath)
-        finalMp3Path = outputPath.replace('.mp4','.mp3')
-        outputStream = ffmpeg.output(inputStream, finalMp3Path, loglevel='info')
-        ffmpeg.run(outputStream)
-        os.remove(audioPath)
+    try:
+        # 创建输出目录（如果不存在）
+        os.makedirs(os.path.dirname(outputPath), exist_ok=True)
+        
+        # 构建FFmpeg命令
+        if videoPath and audioPath:
+            # 视频和音频都存在，进行混流
+            stream = ffmpeg.input(videoPath)
+            audio = ffmpeg.input(audioPath)
+            stream = ffmpeg.output(stream, audio, outputPath, acodec='copy', vcodec='copy')
+        elif videoPath:
+            # 只有视频，直接复制
+            stream = ffmpeg.input(videoPath)
+            stream = ffmpeg.output(stream, outputPath, c='copy')
+        elif audioPath:
+            # 只有音频，直接复制
+            stream = ffmpeg.input(audioPath)
+            stream = ffmpeg.output(stream, outputPath, c='copy')
+        else:
+            raise ValueError("至少需要提供一个输入文件")
+        
+        # 运行FFmpeg命令
+        ffmpeg.run(stream, overwrite_output=True, capture_stdout=True, capture_stderr=True)
+        
+        # 删除临时文件
+        if videoPath and os.path.exists(videoPath):
+            os.remove(videoPath)
+        if audioPath and os.path.exists(audioPath):
+            os.remove(audioPath)
+            
+    except ffmpeg.Error as e:
+        logging.error(f"FFmpeg错误: {e.stderr.decode() if e.stderr else str(e)}")
+        raise
+    except Exception as e:
+        logging.error(f"混流错误: {str(e)}")
+        raise

@@ -7,6 +7,7 @@ from models import DownloadTask, VideoConfig, DownloadConfig
 from task_manager import TaskManager
 import click
 import threading
+import asyncio
 
 # 配置日志
 logging.basicConfig(
@@ -24,11 +25,14 @@ task_manager = TaskManager()
 
 # 下载工作线程
 def download_worker():
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    
     while True:
         task = task_manager.get_next_task()
         if task:
             try:
-                download_core(task)
+                loop.run_until_complete(download_core(task))
                 task_manager.complete_task(task.task_id, True)
             except Exception as e:
                 task_manager.complete_task(task.task_id, False, str(e))
@@ -37,7 +41,7 @@ def download_worker():
 worker_thread = threading.Thread(target=download_worker, daemon=True)
 worker_thread.start()
 
-def select_stream(detecter:video.VideoDownloadURLDataDetecter, video_config: VideoConfig) ->str:
+async def select_stream(detecter:video.VideoDownloadURLDataDetecter, video_config: VideoConfig) ->str:
     videoQuality = config2reality(video_config.video_quality)
     audioQuality = config2reality(video_config.audio_quality)
     codec = config2reality(video_config.codec)
@@ -67,17 +71,16 @@ def select_stream(detecter:video.VideoDownloadURLDataDetecter, video_config: Vid
     logging.debug(f"音频流链接:{audioUrl}")
     return videoUrl,audioUrl 
 
-def download_core(task: DownloadTask) ->None:
-    
+async def download_core(task: DownloadTask) ->None:
     avid, bvid = extract_avid_bvid(task.input)
     bvid = check_input(avid, bvid)
     if bvid is None:
         raise ValueError("未检测到bvid!请检查输入是否正确")
     
     download_video = video.Video(bvid=bvid)
-    downloadUrlData = sync(download_video.get_download_url(0))
+    downloadUrlData = await download_video.get_download_url(0)
     Detecter = video.VideoDownloadURLDataDetecter(data=downloadUrlData)
-    downloadVideoInfo = sync(download_video.get_info())
+    downloadVideoInfo = await download_video.get_info()
     downloadVideoName = downloadVideoInfo["title"]
 
     fileName = sanitize_filename(downloadVideoName) + '.mp4'
@@ -86,31 +89,35 @@ def download_core(task: DownloadTask) ->None:
     tempVideo = os.path.join(task.download_config.cache_dir, "video_temp.m4s")
     output = os.path.join(task.download_config.download_dir, fileName)
 
-    videoUrl, audioUrl = select_stream(Detecter, task.video_config)
+    videoUrl, audioUrl = await select_stream(Detecter, task.video_config)
     
     if Detecter.check_flv_stream():
         logging.info(f"正在下载视频{downloadVideoName} 的Flv文件")
-        downloader.download(videoUrl, tempFlv, task.download_config.threads, True, HEADERS)
+        success, error_msg = await downloader.download(videoUrl, tempFlv)
+        if not success:
+            raise Exception(error_msg)
         logging.debug('混流开始')
-        mix_streams(tempFlv, '', output)
+        await mix_streams(tempFlv, '', output)
     else:
         if task.video_config.audio_only:
             logging.info("仅下载音频模式")
             logging.info(f"正在下载视频 {downloadVideoName} 的音频流")
-            downloader.download(audioUrl, tempAudio, task.download_config.threads, True, HEADERS)
+            success, error_msg = await downloader.download(audioUrl, tempAudio)
+            if not success:
+                raise Exception(error_msg)
             logging.debug('混流开始')
-            mix_streams('', tempAudio, output)
+            await mix_streams('', tempAudio, output)
         else:
             logging.info(f"正在下载视频 {downloadVideoName} 的视频流")
-            logging.info(f'视频流下载链接:{videoUrl}')
-            if not downloader.download(videoUrl, tempVideo):
-                raise Exception("视频流下载失败")
+            success, error_msg = await downloader.download(videoUrl, tempVideo)
+            if not success:
+                raise Exception(error_msg)
             logging.info(f"正在下载视频 {downloadVideoName} 的音频流")
-            logging.info(f'音频流下载链接:{audioUrl}')
-            if not downloader.download(audioUrl, tempAudio):
-                raise Exception("音频流下载失败")
+            success, error_msg = await downloader.download(audioUrl, tempAudio)
+            if not success:
+                raise Exception(error_msg)
             logging.debug('混流开始')
-            mix_streams(tempVideo, tempAudio, output)
+            await mix_streams(tempVideo, tempAudio, output)
 
 @app.route('/download', methods=['POST'])
 def handle_download():

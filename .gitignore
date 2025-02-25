@@ -3,3 +3,4 @@ test.txt
 download.log
 *.mp4
 *.log
+.download_progress.json
