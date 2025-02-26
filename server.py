@@ -43,23 +43,35 @@ worker_thread = threading.Thread(target=download_worker, daemon=True)
 worker_thread.start()
 
 async def select_stream(detecter:video.VideoDownloadURLDataDetecter, video_config: VideoConfig) ->str:
+    #将用户输入的配置转化为实际的配置
     videoQuality = config2reality(video_config.video_quality)
     audioQuality = config2reality(video_config.audio_quality)
     codec = config2reality(video_config.codec)
+    logging.debug(f"用户设置的视频画质:{videoQuality}")
+    logging.debug(f"用户设置的音频画质:{audioQuality}")
+    logging.debug(f"用户设置的编码:{codec}")
+
     streamsList = detecter.detect()
     streamsListSize = len(streamsList)
     videoIndex=audioIndex=None
+
     if (detecter.check_flv_stream()):
         logging.info('Flv流,无需选择')
         videoUrl = streamsList[0].url
     else:
+        #遍历流链接列表
         for i in range(streamsListSize):
             if type(streamsList[i]).__name__ == 'VideoStreamDownloadURL':
+                #当前为视频流链接类
                 if (streamsList[i].video_quality.name == videoQuality) and (streamsList[i].video_codecs.name == codec):
                     videoIndex = i
             elif type(streamsList[i]).__name__ == 'AudioStreamDownloadURL':
+                #当前为音频流链接类
+                logging.debug(f"当前音频流画质:{streamsList[i].audio_quality.name}")
                 if streamsList[i].audio_quality.name == audioQuality:
                     audioIndex = i
+        logging.debug(f"视频流索引:{videoIndex}")
+        logging.debug(f"音频流索引:{audioIndex}")
         if (videoIndex != None) and (audioIndex != None):
             videoUrl = streamsList[videoIndex].url
             audioUrl = streamsList[audioIndex].url
@@ -73,24 +85,24 @@ async def select_stream(detecter:video.VideoDownloadURLDataDetecter, video_confi
     return videoUrl,audioUrl 
 
 async def download_core(task: DownloadTask) ->None:
-    avid, bvid = extract_avid_bvid(task.input)
-    bvid = check_input(avid, bvid)
-    if bvid is None:
-        raise ValueError("未检测到bvid!请检查输入是否正确")
-    
+    #解析数据
+    bvid = task.input
     download_video = video.Video(bvid=bvid)
     downloadUrlData = await download_video.get_download_url(0)
     Detecter = video.VideoDownloadURLDataDetecter(data=downloadUrlData)
     downloadVideoInfo = await download_video.get_info()
     downloadVideoName = downloadVideoInfo["title"]
-
+    logging.debug("解析数据成功")
+    logging.info(f"视频名称:{downloadVideoName}")
+    #合成临时文件名
     fileName = sanitize_filename(downloadVideoName) + '.mp4'
     tempFlv = os.path.join(task.download_config.cache_dir, "flv_temp.flv")
     tempAudio = os.path.join(task.download_config.cache_dir, "audio_temp.m4s")
     tempVideo = os.path.join(task.download_config.cache_dir, "video_temp.m4s")
     output = os.path.join(task.download_config.download_dir, fileName)
-
+    #获取流链接   
     videoUrl, audioUrl = await select_stream(Detecter, task.video_config)
+    logging.debug('获取流链接成功')
     
     if Detecter.check_flv_stream():
         logging.info(f"正在下载视频{downloadVideoName} 的Flv文件")
@@ -200,7 +212,7 @@ def resume_task(task_id):
 def run_server(host, port, config):
     """启动下载服务器"""
     server_config = get_server_config(config)
-    
+    logging.info("服务器加载配置文件成功")
     # 命令行参数优先级高于配置文件
     final_host = host or server_config['host']
     final_port = port or server_config['port']

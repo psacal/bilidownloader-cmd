@@ -109,7 +109,7 @@ def get_task_status(server_url, task_id):
     except Exception as e:
         logging.error(f"获取任务状态异常: {str(e)}")
 
-def manage_task(server_url, task_id, action):
+def manage_task(server_url:str, task_id, action):
     """管理任务状态（暂停/恢复/取消）"""
     try:
         if not server_url.startswith(('http://', 'https://')):
@@ -158,7 +158,8 @@ def download(config, input, video_quality, audio_quality, codec, download_dir, c
     final_audio_only = audio_only if audio_only is not None else client_config['audio_only']
     final_server_url = server_url or client_config['server_url']
     final_threads = threads or client_config['threads']
-    
+    logging.info(f"加载配置文件成功")
+
     bvid=extract_bvid(input)
     logging.info(f"BV号:{bvid}")
     if bvid == None:
@@ -181,7 +182,7 @@ def download(config, input, video_quality, audio_quality, codec, download_dir, c
             threads=final_threads
         )
 
-        task_id = process_single_download(input, video_config, download_config)
+        task_id = process_single_download(bvid, video_config, download_config)
         if task_id:
             logging.info(f"任务已添加，任务ID: {task_id}")
             logging.info("使用 'python client.py status <task_id>' 查看任务状态")

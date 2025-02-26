@@ -52,7 +52,7 @@ python client.py download --input <视频链接/AV号/BV号> [选项]
 - `--audio-only`: 是否仅下载音频，默认False
 - `--server-url`: 服务器地址，默认为http://localhost:5000
 - `--threads`: 下载线程数，默认4
-- `--config`: 配置文件路径，默认为当前目录下的config.yaml
+
 2. 查看任务列表
 ```bash
 python client.py list [--server-url SERVER_URL]
@@ -204,5 +204,4 @@ client:
   download_dir: D:/Videos/bilibili  # 自定义下载目录
   cache_dir: D:/Temp/bilibili      # 自定义缓存目录
   audio_only: false
-  threads: 8           # 使用8线程下载
-```
+  threads: 8           # 使用8线程下载```
