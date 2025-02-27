@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-
+from uuid import uuid4
 class TaskStatus(Enum):
     PENDING = "pending"
     DOWNLOADING = "downloading"
@@ -40,6 +40,6 @@ class DownloadTask:
     
     def __post_init__(self):
         if self.task_id is None:
-            self.task_id = str(hash(f"{self.input}_{datetime.now().timestamp()}"))
+            self.task_id = str(uuid4())
         if self.created_at is None:
             self.created_at = datetime.now()

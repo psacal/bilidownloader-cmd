@@ -11,7 +11,17 @@ class TaskManager:
         self._queue = PriorityQueue()
         self._lock = Lock()
         self._running_tasks: Dict[str, DownloadTask] = {}
-        self.max_concurrent_downloads = 3
+        self._max_concurrent_downloads = 3  # 默认最大并发下载数
+
+    def set_max_concurrent_downloads(self, max_downloads: int):
+        """设置最大并发下载数"""
+        with self._lock:
+            self._max_concurrent_downloads = max_downloads
+            logging.info(f"设置最大并发下载数为: {max_downloads}")
+
+    def get_max_concurrent_downloads(self) -> int:
+        """获取当前最大并发下载数"""
+        return self._max_concurrent_downloads
 
     def add_task(self, task: DownloadTask) -> str:
         """添加新的下载任务"""
@@ -65,7 +75,8 @@ class TaskManager:
         """获取下一个要执行的任务"""
         try:
             with self._lock:
-                if len(self._running_tasks) >= self.max_concurrent_downloads:
+                if len(self._running_tasks) >= self._max_concurrent_downloads:
+                    logging.info("已达到最大并发下载数，无法获取下一个任务。")
                     return None
                     
                 while not self._queue.empty():

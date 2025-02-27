@@ -132,7 +132,7 @@ def cli():
 
 @cli.command()
 @click.option('--log-level',default='INFO',type=click.Choice(['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']),help=loglevelHelp)
-@click.option('--config', default='config.yaml', help='配置文件路径')
+@click.option('--config', default='config.yaml', help=configHelp)
 @click.option('--input',default='',help=inputHelp)
 @click.option('--video-quality', default=None, help=videoQualityHelp)
 @click.option('--audio-quality', default=None, help=audioQualityHelp)
@@ -210,9 +210,9 @@ def download(config, input, video_quality, audio_quality, codec, download_dir, c
             if task_id:
                 if download_url_count > 1:
                     success_count += 1
-                    logging.info(f"任务已添加[{success_count}/{download_url_count}]: {task_id}任务ID: {task_id}")
+                    logging.info(f"任务已添加[{success_count}/{download_url_count}]任务ID: {task_id}")
                 else:
-                    logging.info(f"任务已添加,任务ID: {task_id}")
+                    logging.info(f"任务添加失败")
         logging.info("使用 'python client.py status <task_id>' 查看任务状态")
             
     except Exception as e:
@@ -225,7 +225,7 @@ def list(server_url):
     list_tasks(server_url)
 
 @cli.command()
-@click.argument('task_id')
+@click.argument('task_id', required=True)
 @click.option('--server-url', default=SERVER_URL, help=f'服务器地址,默认为{SERVER_URL}')
 def status(task_id, server_url):
     """查看指定任务的状态"""

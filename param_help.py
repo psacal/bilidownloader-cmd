@@ -45,3 +45,7 @@ loglevelHelp = """日志等级选择:
 - ERROR: 错误信息
 - CRITICAL: 严重错误
 """
+
+configHelp = """配置文件路径，默认为当前目录下的config.json
+配置文件格式参照readme.md进行配置
+"""

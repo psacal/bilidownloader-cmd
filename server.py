@@ -1,6 +1,6 @@
 import logging
 from flask import Flask, request, jsonify
-from bilibili_api import video, sync, HEADERS,select_client 
+from bilibili_api import video, select_client 
 from utils import *
 from download import Downloader
 from models import DownloadTask, VideoConfig, DownloadConfig
@@ -9,7 +9,7 @@ from config import get_server_config
 import click
 import threading
 import asyncio
-from param_help import loglevelHelp
+from param_help import *
 
 # 配置日志
 logging.basicConfig(
@@ -31,13 +31,30 @@ def download_worker():
     asyncio.set_event_loop(loop)
     
     while True:
-        task = task_manager.get_next_task()
-        if task:
+        tasks = []
+        # 获取多个任务，直到达到最大并发下载数
+        while len(tasks) < task_manager.get_max_concurrent_downloads():
+            task = task_manager.get_next_task()
+            if task:
+                tasks.append(task)
+            else:
+                break
+        
+        if tasks:
             try:
-                loop.run_until_complete(download_core(task))
-                task_manager.complete_task(task.task_id, True)
+                # 使用asyncio.gather并发执行多个任务
+                results = loop.run_until_complete(asyncio.gather(*[download_core(task) for task in tasks], return_exceptions=True))
+                for task, result in zip(tasks, results):
+                    if isinstance(result, Exception):
+                        task_manager.complete_task(task.task_id, False, str(result))
+                    else:
+                        task_manager.complete_task(task.task_id, True)
             except Exception as e:
-                task_manager.complete_task(task.task_id, False, str(e))
+                for task in tasks:
+                    task_manager.complete_task(task.task_id, False, str(e))
+        else:
+            # 如果没有任务，等待一段时间再检查
+            loop.run_until_complete(asyncio.sleep(1))
 
 # 启动下载工作线程
 worker_thread = threading.Thread(target=download_worker, daemon=True)
@@ -106,9 +123,9 @@ async def download_core(task: DownloadTask) ->None:
     logging.info(f"视频名称:{downloadVideoName}")
     #合成临时文件名
     fileName = sanitize_filename(downloadVideoName) + '.mp4'
-    tempFlv = os.path.join(task.download_config.cache_dir, "flv_temp.flv")
-    tempAudio = os.path.join(task.download_config.cache_dir, "audio_temp.m4s")
-    tempVideo = os.path.join(task.download_config.cache_dir, "video_temp.m4s")
+    tempFlv = os.path.join(task.download_config.cache_dir, f"flv_temp_{task.task_id}.flv")
+    tempAudio = os.path.join(task.download_config.cache_dir, f"audio_temp_{task.task_id}.m4s")
+    tempVideo = os.path.join(task.download_config.cache_dir, f"video_temp_{task.task_id}.m4s")
     output = os.path.join(task.download_config.download_dir, fileName)
     #获取流链接   
     videoUrl, audioUrl = await select_stream(Detecter, task.video_config)
@@ -219,7 +236,7 @@ def resume_task(task_id):
 @click.option('--log-level', default='INFO', type=click.Choice(['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']), help=loglevelHelp)
 @click.option('--host', default=None, help='服务器监听地址')
 @click.option('--port', default=None, help='服务器监听端口')
-@click.option('--config', default='config.yaml', help='配置文件路径')
+@click.option('--config', default='config.yaml', help=configHelp)
 def run_server(host, port, config, log_level):
     """启动下载服务器"""
     select_client("aiohttp")
