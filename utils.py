@@ -23,7 +23,7 @@ def extract_bvid(url_or_code: str) -> str:
         
     # 匹配模式
     avid_pattern = re.compile(r'[aA][vV](\d+)')
-    bvid_pattern = re.compile(r'[bB][vV][0-9A-Za-z]{10}$')
+    bvid_pattern = re.compile(r'[bB][vV][\d\w]+')
     number_pattern = re.compile(r'^\d+$')
     
     # 尝试匹配AV号

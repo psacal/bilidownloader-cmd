@@ -162,13 +162,27 @@ def download(config, input, video_quality, audio_quality, codec, download_dir, c
     final_server_url = server_url or client_config['server_url']
     final_threads = threads or client_config['threads']
     logging.info(f"加载配置文件成功")
+     
+    download_url_list = []
+    if os.path.isfile(input):
+        try:
+            logging.info(f'批量下载模式！')
+            logging.info(f"读取文件:{input}!")
+            with open(input, 'r', encoding='utf-8') as file:
+                for line in file:
+                    line = line.strip()
+                    if line and (not line.startswith('#')):
+                        # 排除注释和空行
+                        logging.debug(f"已经添加链接{line}到下载列表中")
+                        download_url_list.append(line)
+        except Exception as e:
+            logging.error(f"读取文件失败: {str(e)}")
+            return
+    else:
+        download_url_list.append(input) 
 
-    bvid=extract_bvid(input)
-    logging.info(f"BV号:{bvid}")
-    if bvid == None:
-        logging.error("请提供下载链接/下载链接格式不正确")
-        logging.info(inputHelp)
-        return
+    success_count = 0
+    download_url_count = len(download_url_list)
     
     try:
         video_config = VideoConfig(
@@ -184,11 +198,22 @@ def download(config, input, video_quality, audio_quality, codec, download_dir, c
             server_url=final_server_url,
             threads=final_threads
         )
-
-        task_id = process_single_download(bvid, video_config, download_config)
-        if task_id:
-            logging.info(f"任务已添加，任务ID: {task_id}")
-            logging.info("使用 'python client.py status <task_id>' 查看任务状态")
+        for link in download_url_list:
+            logging.debug(f"从{link}中提取BV号")
+            bvid = extract_bvid(link)
+            logging.info(f"BV号:{bvid}")
+            if bvid == None:
+                logging.error("请提供下载链接/下载链接格式不正确")
+                logging.info(inputHelp)
+                continue
+            task_id = process_single_download(bvid, video_config, download_config)
+            if task_id:
+                if download_url_count > 1:
+                    success_count += 1
+                    logging.info(f"任务已添加[{success_count}/{download_url_count}]: {task_id}任务ID: {task_id}")
+                else:
+                    logging.info(f"任务已添加,任务ID: {task_id}")
+        logging.info("使用 'python client.py status <task_id>' 查看任务状态")
             
     except Exception as e:
         logging.error(f"程序发生未知异常: {str(e)}")

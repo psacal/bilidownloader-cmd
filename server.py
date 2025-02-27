@@ -1,6 +1,6 @@
 import logging
 from flask import Flask, request, jsonify
-from bilibili_api import video, sync, HEADERS
+from bilibili_api import video, sync, HEADERS,select_client 
 from utils import *
 from download import Downloader
 from models import DownloadTask, VideoConfig, DownloadConfig
@@ -55,8 +55,9 @@ async def select_stream(detecter:video.VideoDownloadURLDataDetecter, video_confi
     streamsList = detecter.detect()
     streamsListSize = len(streamsList)
     videoIndex=audioIndex=None
+    logging.debug(streamsList)
 
-    if (detecter.check_flv_stream()):
+    if (detecter.check_flv_mp4_stream()):
         logging.info('Flv流,无需选择')
         videoUrl = streamsList[0].url
     else:
@@ -64,6 +65,8 @@ async def select_stream(detecter:video.VideoDownloadURLDataDetecter, video_confi
         for i in range(streamsListSize):
             if type(streamsList[i]).__name__ == 'VideoStreamDownloadURL':
                 #当前为视频流链接类
+                logging.debug(f"当前视频流画质:{streamsList[i].video_quality.name}")
+                logging.debug(f"当前视频流解码器:{streamsList[i].video_codecs.name}")
                 if (streamsList[i].video_quality.name == videoQuality) and (streamsList[i].video_codecs.name == codec):
                     videoIndex = i
             elif type(streamsList[i]).__name__ == 'AudioStreamDownloadURL':
@@ -79,10 +82,14 @@ async def select_stream(detecter:video.VideoDownloadURLDataDetecter, video_confi
         else:
             logging.warning("设置的清晰度/编码/音质超过了原视频，自动以最佳画质下载")
             streamsList = detecter.detect_best_streams()
+            print(streamsList)
+            logging.debug(f"获取最清晰流链接成功")
             videoUrl = streamsList[0].url
+            logging.debug(f"v!")
             audioUrl = streamsList[1].url
-    logging.debug(f"视频流链接:{videoUrl}")
-    logging.debug(f"音频流链接:{audioUrl}")
+            logging.debug(f"a!")
+        logging.debug(f"视频流链接:{videoUrl}")
+        logging.debug(f"音频流链接:{audioUrl}")
     return videoUrl,audioUrl 
 
 async def download_core(task: DownloadTask) ->None:
@@ -107,7 +114,7 @@ async def download_core(task: DownloadTask) ->None:
     videoUrl, audioUrl = await select_stream(Detecter, task.video_config)
     logging.debug('获取流链接成功')
     
-    if Detecter.check_flv_stream():
+    if Detecter.check_flv_mp4_stream():
         logging.info(f"正在下载视频{downloadVideoName} 的Flv文件")
         success, error_msg = await downloader.download(videoUrl, tempFlv)
         if not success:
@@ -215,6 +222,7 @@ def resume_task(task_id):
 @click.option('--config', default='config.yaml', help='配置文件路径')
 def run_server(host, port, config, log_level):
     """启动下载服务器"""
+    select_client("aiohttp")
     logging.getLogger().setLevel(log_level)
     logging.info(f"目前的日志等级{log_level}")
     server_config = get_server_config(config)
