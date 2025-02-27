@@ -48,7 +48,6 @@ def process_single_download(input_url, video_config, download_config):
         result = response.json()
         if result["status"] == "success":
             task_id = result["task_id"]
-            logging.info(f"任务已添加，任务ID: {task_id}")
             return task_id
         else:
             logging.error(f"下载失败 {input_url}: {result['message']}")
@@ -132,6 +131,7 @@ def cli():
     pass
 
 @cli.command()
+@click.option('--log-level',default='INFO',type=click.Choice(['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']),help=loglevelHelp)
 @click.option('--config', default='config.yaml', help='配置文件路径')
 @click.option('--input',default='',help=inputHelp)
 @click.option('--video-quality', default=None, help=videoQualityHelp)
@@ -142,8 +142,11 @@ def cli():
 @click.option('--audio-only',default=None,help=audioOnlyHelp)
 @click.option('--server-url', default=None, help=f'服务器地址')
 @click.option('--threads',default=None,help=threadsHelp)
-def download(config, input, video_quality, audio_quality, codec, download_dir, cache_dir, audio_only, server_url, threads):   
+def download(config, input, video_quality, audio_quality, codec, download_dir, cache_dir, audio_only, server_url, threads, log_level):   
     """下载视频"""
+    logging.getLogger().setLevel(log_level)
+    logging.info(f"目前的日志等级{log_level}")
+
     check_ffmpeg()
     
     # 加载配置文件

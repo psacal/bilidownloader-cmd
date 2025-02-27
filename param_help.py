@@ -37,3 +37,11 @@ audioOnlyHelp = "是否仅下载音频，默认为False"
 maxWorkersHelp = "并发下载线程数，默认为3"
 
 threadsHelp = "下载线程数，默认为4"
+
+loglevelHelp = """日志等级选择:
+- DEBUG: 调试信息
+- INFO: 正常信息
+- WARNING: 警告信息
+- ERROR: 错误信息
+- CRITICAL: 严重错误
+"""

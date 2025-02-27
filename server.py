@@ -9,6 +9,7 @@ from config import get_server_config
 import click
 import threading
 import asyncio
+from param_help import loglevelHelp
 
 # 配置日志
 logging.basicConfig(
@@ -76,7 +77,7 @@ async def select_stream(detecter:video.VideoDownloadURLDataDetecter, video_confi
             videoUrl = streamsList[videoIndex].url
             audioUrl = streamsList[audioIndex].url
         else:
-            logging.error("设置的清晰度/编码/音质超过了原视频，自动以最佳画质下载")
+            logging.warning("设置的清晰度/编码/音质超过了原视频，自动以最佳画质下载")
             streamsList = detecter.detect_best_streams()
             videoUrl = streamsList[0].url
             audioUrl = streamsList[1].url
@@ -87,6 +88,8 @@ async def select_stream(detecter:video.VideoDownloadURLDataDetecter, video_confi
 async def download_core(task: DownloadTask) ->None:
     #解析数据
     bvid = task.input
+    logging.info(f"开始下载: {bvid}")
+    
     download_video = video.Video(bvid=bvid)
     downloadUrlData = await download_video.get_download_url(0)
     Detecter = video.VideoDownloadURLDataDetecter(data=downloadUrlData)
@@ -206,11 +209,14 @@ def resume_task(task_id):
     return jsonify({"status": "error", "message": "无法恢复任务"}), 400
 
 @click.command()
+@click.option('--log-level', default='INFO', type=click.Choice(['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']), help=loglevelHelp)
 @click.option('--host', default=None, help='服务器监听地址')
 @click.option('--port', default=None, help='服务器监听端口')
 @click.option('--config', default='config.yaml', help='配置文件路径')
-def run_server(host, port, config):
+def run_server(host, port, config, log_level):
     """启动下载服务器"""
+    logging.getLogger().setLevel(log_level)
+    logging.info(f"目前的日志等级{log_level}")
     server_config = get_server_config(config)
     logging.info("服务器加载配置文件成功")
     # 命令行参数优先级高于配置文件
