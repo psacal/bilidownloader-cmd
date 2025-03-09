@@ -6,8 +6,9 @@ import asyncio
 import ffmpeg
 import subprocess
 import bilibili_api
-from bilibili_api import HEADERS
-
+from bilibili_api import HEADERS,login_v2
+import tqdm
+from questionary import Validator, ValidationError
 def extract_bvid(url_or_code: str) -> str:
     '''
     从输入中提取BV号，支持以下格式：
@@ -146,3 +147,18 @@ async def mix_streams(videoPath='', audioPath='', outputPath='') -> None:
     except Exception as e:
         logging.error(f"混流错误: {str(e)}")
         raise
+class CountryCodeValidator(Validator):
+    def validate(self, document):
+        code = document.text
+        # 业务逻辑验证
+        try:
+            if not login_v2.have_code(code):
+                raise ValidationError(
+                    message="无效的国家代码", 
+                    cursor_position=len(code)
+                )
+        except ValueError:  # 如果验证失败抛出异常
+            raise ValidationError(
+                message="非法代码格式",
+                cursor_position=len(code)
+            )

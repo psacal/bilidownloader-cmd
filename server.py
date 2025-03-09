@@ -69,13 +69,13 @@ async def select_stream(detecter:video.VideoDownloadURLDataDetecter, video_confi
     logging.debug(f"用户设置的音频画质:{audioQuality}")
     logging.debug(f"用户设置的编码:{codec}")
 
-    streamsList = detecter.detect()
+    streamsList = detecter.detect_all()
     streamsListSize = len(streamsList)
     videoIndex=audioIndex=None
     logging.debug(streamsList)
 
     if (detecter.check_flv_mp4_stream()):
-        logging.info('Flv流,无需选择')
+        logging.info('Flv/mp4流,无需选择')
         videoUrl = streamsList[0].url
     else:
         #遍历流链接列表

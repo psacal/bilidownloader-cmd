@@ -1,6 +1,6 @@
 test.txt
 /__pycache__
-download.log
 *.mp4
 *.log
 .download_progress.json
+test.py
