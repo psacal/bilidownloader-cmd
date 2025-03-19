@@ -1,5 +1,7 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
 """
-B站视频下载工具 - 服务器入口
+B站视频下载工具 - 命令行客户端入口
 """
 import sys
 import os
@@ -10,8 +12,8 @@ src_dir = os.path.join(current_dir, 'src')
 if src_dir not in sys.path:
     sys.path.insert(0, src_dir)
 
-# 导入服务器运行函数
-from src.server.server_core import run_server
+# 导入客户端CLI
+from src.client.cli import cli
 
 if __name__ == "__main__":
-    run_server()
+    cli()

@@ -1,14 +1,15 @@
 import os
 import json
-import logging
 import aiohttp
 import asyncio
 from tqdm import tqdm
 from typing import Dict, Optional
 from bilibili_api import HEADERS
 
+from common.logger import get_logger
 class Downloader:
     def __init__(self, save_dir: str = "."):
+        self.logger = get_logger(__name__)
         self.save_dir = save_dir
         self.progress_file = os.path.join(save_dir, ".download_progress.json")
         self._load_progress()
@@ -21,7 +22,7 @@ class Downloader:
                 with open(self.progress_file, 'r', encoding='utf-8') as f:
                     self.progress = json.load(f)
             except Exception as e:
-                logging.error(f"加载下载进度文件失败: {str(e)}")
+                self.logger.error(f"加载下载进度文件失败: {str(e)}")
 
     def _save_progress(self) -> None:
         """保存下载进度到文件"""
@@ -29,7 +30,7 @@ class Downloader:
             with open(self.progress_file, 'w', encoding='utf-8') as f:
                 json.dump(self.progress, f, ensure_ascii=False, indent=2)
         except Exception as e:
-            logging.error(f"保存下载进度文件失败: {str(e)}")
+            self.logger.error(f"保存下载进度文件失败: {str(e)}")
 
     async def _get_file_size(self, url: str) -> Optional[int]:
         """获取远程文件大小"""
@@ -38,7 +39,7 @@ class Downloader:
                 async with session.head(url, headers=HEADERS) as response:
                     return int(response.headers.get('content-length', 0))
         except Exception as e:
-            logging.error(f"获取文件大小失败: {str(e)}")
+            self.logger.error(f"获取文件大小失败: {str(e)}")
             return None
 
     async def download(self, url: str, file_path: str, chunk_size: int = 1024 * 1024) -> tuple[bool, Optional[str]]:
@@ -109,5 +110,5 @@ class Downloader:
 
         except Exception as e:
             error_msg = str(e)
-            logging.error(f"下载失败: {error_msg}")
+            self.logger.error(f"下载失败: {error_msg}")
             return False, error_msg

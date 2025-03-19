@@ -9,6 +9,26 @@ import bilibili_api
 from bilibili_api import HEADERS,login_v2
 import tqdm
 from questionary import Validator, ValidationError
+from pathlib import Path
+
+def find_project_root() -> Path:
+            """查找项目根目录"""
+                # 项目标记文件列表（用于识别项目根目录）
+            _PROJECT_MARKERS = ['.git', 'pyproject.toml', 'LICENSE']
+            current_path = Path(__file__).resolve().parent
+            logging.debug(f"初始路径: {current_path}")
+
+            for i in range(5):  # 最多向上查找5层
+                logging.debug(f"第{i+1}次检查: {current_path}")
+                if any((current_path / marker).exists() for marker in _PROJECT_MARKERS):
+                    logging.debug(f"找到标记于: {current_path}")
+                    return current_path
+                current_path = current_path.parent
+            
+            # 未找到标记，使用当前目录
+            logging.warning(f"未找到项目标记，使用当前路径: {current_path}")
+            return current_path
+
 def extract_bvid(url_or_code: str) -> str:
     '''
     从输入中提取BV号，支持以下格式：

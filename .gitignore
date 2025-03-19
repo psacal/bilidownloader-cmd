@@ -1,6 +1,84 @@
-test.txt
-/__pycache__
-*.mp4
+# 项目根目录下的.gitignore文件
+
+# Python通用忽略规则
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# 虚拟环境
+venv/
+ENV/
+env/
+.env/
+venv*/
+
+# 日志文件
 *.log
+*.log.*
+logs/
+
+# 本地配置文件
+.env
+.local.env
+config.yaml
+config_local.py
+
+# 编辑器/IDE配置
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# 操作系统生成文件
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# 测试相关
+.coverage
+htmlcov/
+.pytest_cache/
+test-results.xml
+
+# 下载缓存和临时文件
 .download_progress.json
+*.tmp
+*.temp
+*.download
+/cache
+/download
+
+# 视频/音频文件
+*.mp4
+*.flv
+*.m4s
+*.mp3
+
+# 项目特定忽略
+test.txt
 test.py
+/configs

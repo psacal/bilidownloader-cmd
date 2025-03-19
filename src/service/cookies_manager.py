@@ -1,14 +1,16 @@
 import os
 import time
 import yaml
-import logging
 from bilibili_api import Credential,sync,Geetest,login_v2,GeetestType,select_client
 from typing import Optional
 import questionary
-from utils import CountryCodeValidator
 import asyncio
-logging.basicConfig(level=logging.INFO,format='%(asctime)s - %(levelname)s - %(message)s')
+
+from common.utils import CountryCodeValidator
+from common.logger import get_logger
+
 select_client("aiohttp")
+
 class CookieManager:
     def __init__(self,config_dir:str = "config") -> None:
         """
@@ -21,10 +23,11 @@ class CookieManager:
             返回值:
                 None
         """
+        self.logger = get_logger(__name__)
         self.cookies_dir = os.path.join(config_dir, 'cookies')
         if not os.path.exists(self.cookies_dir):
             os.makedirs(self.cookies_dir, exist_ok=True)
-            logging.info(f"创建cookies目录{self.cookies_dir}")
+            self.logger.info(f"创建cookies目录{self.cookies_dir}")
 
     def save_cookies(self, credential: Credential, alias: str) -> bool:
         """
@@ -46,11 +49,11 @@ class CookieManager:
             with open(file_path, 'w') as file:
                 yaml.dump(cookies, file)
             
-            logging.info(f"保存cookies成功: {alias}")
+            self.logger.info(f"保存cookies成功: {alias}")
             return True
         except Exception as e:
             # 异常处理及日志记录
-            logging.error(f"保存cookies失败: {str(e)}")
+            self.logger.error(f"保存cookies失败: {str(e)}")
             return False        
     def load_cookies(self, alias: str) -> Optional[Credential]:
         """
@@ -72,14 +75,15 @@ class CookieManager:
             # 创建凭证对象并验证有效性
             credential = Credential(cookies=cookies)
             if sync(credential.check_refresh()):
-                logging.info(f"加载cookies成功: {alias}")
+                self.logger.info(f"加载cookies成功: {alias}.yaml")
             else:
-                logging.warning("cookies已过期,需要重新登陆")
+                self.logger.warning("cookies已过期,需要重新登陆")
+                self.login_user(alias)
             return credential
 
         except FileNotFoundError:
             # 处理文件不存在异常
-            logging.error(f"加载cookies失败: 文件不存在 {alias}")
+            self.logger.error(f"加载cookies失败: 文件不存在 {alias}.yaml")
             return None
     def list_accounts(self) -> list:
         """列出所有已保存的账号"""
@@ -88,17 +92,24 @@ class CookieManager:
     def _get_filepath(self, alias: str) -> str:
         """获取账号对应的文件路径"""
         return os.path.join(self.cookies_dir, f"{alias}.yaml")
-    async def login_user(self) -> Credential:
-        """交互式登录入口"""
-        alias = await questionary.text(message="请输入账号别名：").ask_async()
+    async def login_user(self, alias: str) -> Credential:
+        """
+        交互式登录入口
+
+        参数:
+            alias: cookies配置的别名标识，用于生成对应的凭证文件名
+
+        返回值:
+            Credential: 包含cookies的凭证对象实例，加载失败时返回None
+        """
         gee = Geetest() #实例化极验测试类
         await gee.generate_test(type_=GeetestType.LOGIN) # 生成登陆
         gee.start_geetest_server() # 在本地部署网页端测试服务
-        logging.info("使用浏览器打开链接完成人机验证：",gee.get_geetest_server_url()) # 获取本地服务链接
+        self.logger.info("使用浏览器打开链接完成人机验证：",gee.get_geetest_server_url()) # 获取本地服务链接
         while not gee.has_done():
             await asyncio.sleep(0.5)  
         gee.close_geetest_server() # 关闭部署的网页端测试服务
-        logging.debug("result:", gee.get_result())
+        self.logger.debug("result:", gee.get_result())
 
         # 选择登录方式
         login_type = await questionary.select(
@@ -122,7 +133,7 @@ class CookieManager:
             await qr.generate_qrcode() # 生成二维码
             print(qr.get_qrcode_terminal()) # 生成终端二维码文本，打印
             while not qr.has_done():     
-                logging.info(await qr.check_state()) # 检查状态
+                self.logger.info(await qr.check_state()) # 检查状态
                 asyncio.sleep(1) 
             credential = qr.get_credential()
             
@@ -168,11 +179,11 @@ class CookieManager:
             await gee.generate_test(type_=GeetestType.VERIFY) # 生成测试
 
             gee.start_geetest_server() # 在本地部署网页端测试服务
-            logging.info("使用浏览器打开链接完成人机验证：",gee.get_geetest_server_url()) # 获取本地服务链接
+            self.logger.info("使用浏览器打开链接完成人机验证：",gee.get_geetest_server_url()) # 获取本地服务链接
             while not gee.has_done():  
                 asyncio.sleep(0.5)                                                    
             gee.close_geetest_server() # 关闭部署的网页端测试服务
-            logging.info("result:", gee.get_result())
+            self.logger.info("result:", gee.get_result())
             await credential.send_sms(gee) # 发送验证码
             
             sms_code = questionary.text(
@@ -182,6 +193,6 @@ class CookieManager:
             credential = await credential.complete_check(sms_code)  
 
         if credential and self.save_cookies(credential, alias=alias):
-            logging.info(f"登录成功: {alias}")
+            self.logger.info(f"登录成功: {alias}")
             return credential
         raise RuntimeError("登录失败")

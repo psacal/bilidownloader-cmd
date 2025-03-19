@@ -2,7 +2,7 @@ import logging
 from typing import Dict, List, Optional
 from queue import PriorityQueue
 from threading import Lock
-from models import DownloadTask, TaskStatus
+from ..common.models import DownloadTask, TaskStatus  # 已经修改为相对导入
 from datetime import datetime
 
 class TaskManager:
@@ -101,6 +101,7 @@ class TaskManager:
                 task.status = TaskStatus.COMPLETED if success else TaskStatus.FAILED
                 task.completed_at = datetime.now()
                 task.error_message = error_message
+                task.progress = 100.0
                 if task_id in self._running_tasks:
                     del self._running_tasks[task_id]
                 logging.info(f"任务{'完成' if success else '失败'}: {task_id}")

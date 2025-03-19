@@ -28,24 +28,12 @@ codecHelp = """视频编码器选择:
 - H265: HEVC编码
 - AV1: AV1编码"""
 
-downloadDirHelp = "下载文件保存目录，默认为当前目录"
+downloadDirHelp = "下载文件保存目录，默认为项目根目录下的download目录"
 
-cacheDirHelp = "下载临时文件存放目录，默认为当前目录"
+cacheDirHelp = "下载临时文件存放目录，默认为项目根目录下的cache目录"
 
 audioOnlyHelp = "是否仅下载音频，默认为False"
 
 maxWorkersHelp = "并发下载线程数，默认为3"
 
 threadsHelp = "下载线程数，默认为4"
-
-loglevelHelp = """日志等级选择:
-- DEBUG: 调试信息
-- INFO: 正常信息
-- WARNING: 警告信息
-- ERROR: 错误信息
-- CRITICAL: 严重错误
-"""
-
-configHelp = """配置文件路径，默认为当前目录下的config.json
-配置文件格式参照readme.md进行配置
-"""
