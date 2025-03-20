@@ -2,7 +2,7 @@ import logging
 from typing import Dict, List, Optional
 from queue import PriorityQueue
 from threading import Lock
-from ..common.models import DownloadTask, TaskStatus  # 已经修改为相对导入
+from src.common.models import DownloadTask, TaskStatus  # 已经修改为相对导入
 from datetime import datetime
 
 class TaskManager:

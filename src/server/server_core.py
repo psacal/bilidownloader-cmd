@@ -1,14 +1,8 @@
 import click
 import os
 import sys
-import logging
 from bilibili_api import select_client
 from pathlib import Path
-
-current_dir = os.path.dirname(os.path.abspath(__file__))
-src_dir = os.path.abspath(os.path.join(current_dir, '..'))  # 定位到src目录
-if src_dir not in sys.path:
-    sys.path.insert(0, src_dir)
 
 from src.common.param_helps.server_help import *
 from src.common.param_helps.shared_help import *

@@ -1,9 +1,18 @@
 # 核心依赖包
-click>=8.0.0
-flask>=2.0.0
-requests>=2.26.0
-tqdm>=4.62.0
-bilibili-api>=9.0.0
+click>=8.1.8
+flask>=3.1.0
+requests>=2.32.3
+bilibili-api-python>=17.1.4
+tqdm>=4.67.1
+rich>=13.9.4
+pyyaml>=6.0.0
+qrcode>=8.0.0
+aiohappyeyeballs>=2.3.0
+beautifulsoup4>=4.9.3
+lxml>=5.3.1
+APScheduler>=3.11.0
+pycryptodomex>=3.21.0
 
-# 类型提示支持
-typing>=3.7.4
+# 其他依赖
+aiohttp>=3.8.0
+questionary>=1.10.0

@@ -2,8 +2,8 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Dict, Any, Optional
 import yaml
-from common.logger import get_logger
-from common.utils import find_project_root
+from src.common.logger import get_logger
+from src.common.utils import find_project_root
 
 class UnifiedConfigManager:
     """统一配置管理器（简化版）"""

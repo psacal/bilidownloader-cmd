@@ -1,7 +1,6 @@
 import logging
 import click
 import os
-import sys
 from rich.console import Console,Group
 from rich.table import Table
 from rich.progress_bar import ProgressBar
@@ -10,17 +9,12 @@ from rich.style import Style
 from rich.panel import Panel
 from pathlib import Path
 
-current_dir = os.path.dirname(os.path.abspath(__file__))
-src_dir = os.path.abspath(os.path.join(current_dir, '..'))  # 定位到src目录
-if src_dir not in sys.path:
-    sys.path.insert(0, src_dir)
-
-from ..common.param_helps.client_help import *
-from ..common.param_helps.shared_help import *
-from ..common.utils import check_ffmpeg,extract_bvid,find_project_root
-from ..common.models import VideoConfig, DownloadConfig
-from ..common.logger import configure_logging,get_logger
-from .api import ClientAPI 
+from src.common.param_helps.client_help import *
+from src.common.param_helps.shared_help import *
+from src.common.utils import check_ffmpeg,extract_bvid,find_project_root
+from src.common.models import VideoConfig, DownloadConfig
+from src.common.logger import configure_logging,get_logger
+from client.api import ClientAPI 
 
 console = Console()
 PROJECT_ROOT = find_project_root()

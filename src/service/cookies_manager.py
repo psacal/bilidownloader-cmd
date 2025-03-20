@@ -6,8 +6,8 @@ from typing import Optional
 import questionary
 import asyncio
 
-from common.utils import CountryCodeValidator
-from common.logger import get_logger
+from src.common.utils import CountryCodeValidator
+from src.common.logger import get_logger
 
 select_client("aiohttp")
 

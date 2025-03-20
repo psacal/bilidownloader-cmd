@@ -1,1 +1,1 @@
-__all__ = ['client', 'common', 'server', 'service']  # 显式声明所有子模块
+__all__ = ['client', 'common', 'server', 'service','tools']  # 显式声明所有子模块

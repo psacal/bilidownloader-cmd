@@ -6,7 +6,7 @@ from tqdm import tqdm
 from typing import Dict, Optional
 from bilibili_api import HEADERS
 
-from common.logger import get_logger
+from src.common.logger import get_logger
 class Downloader:
     def __init__(self, save_dir: str = "."):
         self.logger = get_logger(__name__)
