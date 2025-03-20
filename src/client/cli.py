@@ -128,7 +128,7 @@ def download(config, input, video_quality, audio_quality, codec, download_dir, c
                     logger.info(f"任务已添加[{success_count}/{download_url_count}]任务ID: {task_id}")
                 else:
                     logger.info(f"任务添加失败")
-        logger.info("使用 'python client.py status <task_id>' 查看任务状态")
+        logger.info("使用 'poetry run btool-download status <task_id>' 查看任务状态")
             
     except Exception as e:
         logger.error(f"程序发生未知异常: {str(e)}")
@@ -156,7 +156,7 @@ def list(server_url):
         
         # 定义列（保持不变）
         table.add_column("ID", style="cyan", width=12)
-        table.add_column("视频标题", style="magenta", width=40)
+        table.add_column("BV号", style="magenta", width=40)
         table.add_column("状态", width=10)
         table.add_column("进度", justify="right", width=20)
         table.add_column("错误信息", style="red", width=30)
@@ -165,7 +165,7 @@ def list(server_url):
         for task in tasks:
             # 安全获取字段值
             task_id = str(task.get('task_id', '未知ID'))
-            video_title = str(task.get('input', '未知视频'))[:35]  # 截断长标题
+            video_title = str(task.get('input', '未知视频'))[:35]  
             status = str(task.get('status', 'unknown')).lower()
             progress = task.get('progress', 0) or 0  # 处理None值
             raw_error = task.get('error_message')  # 保留原始值
