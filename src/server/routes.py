@@ -1,9 +1,10 @@
 from flask import request, jsonify
 from src.common.models import VideoConfig, DownloadConfig, DownloadTask
+from src.service.task_manager import TaskManager
 import logging
 
 class APIRoutes:
-    def __init__(self, app, task_manager):
+    def __init__(self, app, task_manager:TaskManager):
         self.app = app
         self.task_manager = task_manager
         self.register_routes()

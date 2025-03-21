@@ -12,10 +12,10 @@ class TaskStatus(Enum):
 
 @dataclass
 class VideoConfig:
-    video_quality: str
-    audio_quality: str
-    codec: str
-    audio_only: bool = False
+    video_quality: str #画质
+    audio_quality: str #音质
+    codec: str #编码
+    audio_only: bool = False #仅下载音频模式
 
 @dataclass
 class DownloadConfig:
