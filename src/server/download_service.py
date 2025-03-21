@@ -1,8 +1,9 @@
 import asyncio
 import threading
 import os
+from time import time
 from bilibili_api import video
-from src.common.models import DownloadTask  
+from src.common.models import DownloadTask,TaskStatus  
 from src.service.download import Downloader  
 from src.service.task_manager import TaskManager
 from src.common.utils import sanitize_filename, mix_streams  
@@ -54,6 +55,15 @@ class DownloadService:
             else:
                 # 如果没有任务，等待一段时间再检查
                 loop.run_until_complete(asyncio.sleep(1))
+
+    def _update_progress(self, task: DownloadTask, progress: float):
+        """更新任务进度到管理器"""
+        if time() - task.last_updated < 0.3:  # 每300ms更新一次
+            return
+        task.last_updated = time()
+        task.progress = round(progress, 2)
+        task.status = TaskStatus.DOWNLOADING
+        self.task_manager.update_task(task)            
     
     async def download_core(self, task: DownloadTask) -> None:
         """核心下载逻辑"""
@@ -84,7 +94,7 @@ class DownloadService:
         
         if Detecter.check_flv_mp4_stream():
             self.logger.info(f"正在下载视频{downloadVideoName} 的Flv文件")
-            success, error_msg = await self.downloader.download(videoUrl, tempFlv)
+            success, error_msg = await self.downloader.download(videoUrl, tempFlv, progress_callback=lambda p: self._update_progress(task, p))
             if not success:
                 raise Exception(error_msg)
             self.logger.debug('混流开始')
@@ -93,18 +103,18 @@ class DownloadService:
             if task.video_config.audio_only == 'True':
                 self.logger.info("仅下载音频模式")
                 self.logger.info(f"正在下载视频 {downloadVideoName} 的音频流")
-                success, error_msg = await self.downloader.download(audioUrl, tempAudio)
+                success, error_msg = await self.downloader.download(audioUrl, tempAudio, progress_callback=lambda p: self._update_progress(task, p))
                 if not success:
                     raise Exception(error_msg)
                 self.logger.debug('混流开始')
                 await mix_streams('', tempAudio, output)
             else:
                 self.logger.info(f"正在下载视频 {downloadVideoName} 的视频流")
-                success, error_msg = await self.downloader.download(videoUrl, tempVideo)
+                success, error_msg = await self.downloader.download(videoUrl, tempVideo, progress_callback=lambda p: self._update_progress(task, p))
                 if not success:
                     raise Exception(error_msg)
                 self.logger.info(f"正在下载视频 {downloadVideoName} 的音频流")
-                success, error_msg = await self.downloader.download(audioUrl, tempAudio)
+                success, error_msg = await self.downloader.download(audioUrl, tempAudio, progress_callback=lambda p: self._update_progress(task, p))
                 if not success:
                     raise Exception(error_msg)
                 self.logger.debug('混流开始')

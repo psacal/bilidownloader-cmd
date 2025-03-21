@@ -15,7 +15,7 @@ class VideoConfig:
     video_quality: str #画质
     audio_quality: str #音质
     codec: str #编码
-    audio_only: bool = False #仅下载音频模式
+    audio_only: bool = False
 
 @dataclass
 class DownloadConfig:
@@ -37,7 +37,7 @@ class DownloadTask:
     completed_at: datetime = None
     error_message: str = None
     progress: float = 0.0
-    
+    last_updated :float = 0.0
     def __post_init__(self):
         if self.task_id is None:
             self.task_id = str(uuid4())

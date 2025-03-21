@@ -3,7 +3,7 @@ import json
 import aiohttp
 import asyncio
 from tqdm import tqdm
-from typing import Dict, Optional
+from typing import Callable, Dict, Optional
 from bilibili_api import HEADERS
 
 from src.common.logger import get_logger
@@ -42,13 +42,16 @@ class Downloader:
             self.logger.error(f"获取文件大小失败: {str(e)}")
             return None
 
-    async def download(self, url: str, file_path: str, chunk_size: int = 1024 * 1024) -> tuple[bool, Optional[str]]:
+    async def download(self, url: str, file_path: str, 
+                  chunk_size: int = 1024*1024,
+                  progress_callback: Optional[Callable[[float], None]] = None) -> tuple[bool, Optional[str]]:
         """异步下载文件，支持断点续传
         
         Args:
             url: 下载链接
             file_path: 保存路径
             chunk_size: 分块大小，默认1MB
+            progress_callback: 进度回调函数，参数为下载进度百分比
             
         Returns:
             tuple[bool, Optional[str]]: (是否成功, 错误信息)
@@ -93,6 +96,10 @@ class Downloader:
                                 if chunk:
                                     f.write(chunk)
                                     downloaded_size += len(chunk)
+                                    current_progress = downloaded_size / file_size * 100  # 计算百分比
+                                    if progress_callback:
+                                        progress_callback(current_progress)
+                                        
                                     pbar.update(len(chunk))
                                     
                                     # 定期保存进度

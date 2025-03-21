@@ -106,8 +106,31 @@ class TaskManager:
                     del self._running_tasks[task_id]
                 logging.info(f"任务{'完成' if success else '失败'}: {task_id}")
 
-    def update_progress(self, task_id: str, progress: float):
-        """更新任务进度"""
-        task = self._tasks.get(task_id)
-        if task:
-            task.progress = progress
+    def update_task(self, updated_task: DownloadTask) -> bool:
+        """更新任务状态（线程安全版）
+        
+        Args:
+            updated_task: 包含最新状态的任务对象
+            
+        Returns:
+            bool: 是否更新成功
+        """
+        with self._lock:  # 保证线程安全
+            # 检查任务是否存在
+            existing_task = self._tasks.get(updated_task.task_id)
+            if not existing_task:
+                logging.warning(f"尝试更新不存在的任务: {updated_task.task_id}")
+                return False
+            
+            # 保留不可变字段（创建时间等）
+            updated_task.created_at = existing_task.created_at
+            
+            # 同步所有可变字段
+            self._tasks[updated_task.task_id] = updated_task
+            
+            # 如果任务正在运行，同步更新运行中任务列表
+            if updated_task.task_id in self._running_tasks:
+                self._running_tasks[updated_task.task_id] = updated_task
+            
+            logging.debug(f"任务状态已更新: {updated_task.task_id}")
+            return True
