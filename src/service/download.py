@@ -97,6 +97,7 @@ class Downloader:
                                     f.write(chunk)
                                     downloaded_size += len(chunk)
                                     current_progress = downloaded_size / file_size * 100  # 计算百分比
+                                    self.logger.debug(f"下载进度: {current_progress:.2f}%")
                                     if progress_callback:
                                         progress_callback(current_progress)
                                         

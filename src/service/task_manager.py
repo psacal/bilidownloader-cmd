@@ -3,10 +3,12 @@ from typing import Dict, List, Optional
 from queue import PriorityQueue
 from threading import Lock
 from src.common.models import DownloadTask, TaskStatus  # 已经修改为相对导入
+from src.common.logger import get_logger
 from datetime import datetime
 
 class TaskManager:
     def __init__(self):
+        self.logger = get_logger(__name__)
         self._tasks: Dict[str, DownloadTask] = {}
         self._queue = PriorityQueue()
         self._lock = Lock()
@@ -17,7 +19,7 @@ class TaskManager:
         """设置最大并发下载数"""
         with self._lock:
             self._max_concurrent_downloads = max_downloads
-            logging.info(f"设置最大并发下载数为: {max_downloads}")
+            self.logger.info(f"设置最大并发下载数为: {max_downloads}")
 
     def get_max_concurrent_downloads(self) -> int:
         """获取当前最大并发下载数"""
@@ -28,7 +30,7 @@ class TaskManager:
         with self._lock:
             self._tasks[task.task_id] = task
             self._queue.put((-task.priority, task.created_at.timestamp(), task.task_id))
-            logging.info(f"添加新任务: {task.task_id}")
+            self.logger.info(f"添加新任务: {task.task_id}")
             return task.task_id
 
     def get_task(self, task_id: str) -> Optional[DownloadTask]:
@@ -46,7 +48,7 @@ class TaskManager:
             if task and task.status in [TaskStatus.PENDING, TaskStatus.PAUSED]:
                 task.status = TaskStatus.CANCELLED
                 task.completed_at = datetime.now()
-                logging.info(f"任务已取消: {task_id}")
+                self.logger.info(f"任务已取消: {task_id}")
                 return True
             return False
 
@@ -56,7 +58,7 @@ class TaskManager:
             task = self._tasks.get(task_id)
             if task and task.status == TaskStatus.PENDING:
                 task.status = TaskStatus.PAUSED
-                logging.info(f"任务已暂停: {task_id}")
+                self.logger.info(f"任务已暂停: {task_id}")
                 return True
             return False
 
@@ -67,7 +69,7 @@ class TaskManager:
             if task and task.status == TaskStatus.PAUSED:
                 task.status = TaskStatus.PENDING
                 self._queue.put((-task.priority, task.created_at.timestamp(), task.task_id))
-                logging.info(f"任务已恢复: {task_id}")
+                self.logger.info(f"任务已恢复: {task_id}")
                 return True
             return False
 
@@ -76,7 +78,7 @@ class TaskManager:
         try:
             with self._lock:
                 if len(self._running_tasks) >= self._max_concurrent_downloads:
-                    logging.info("已达到最大并发下载数，无法获取下一个任务。")
+                    self.logger.info("已达到最大并发下载数，无法获取下一个任务。")
                     return None
                     
                 while not self._queue.empty():
@@ -101,36 +103,64 @@ class TaskManager:
                 task.status = TaskStatus.COMPLETED if success else TaskStatus.FAILED
                 task.completed_at = datetime.now()
                 task.error_message = error_message
-                task.progress = 100.0
+                task.progress = 100.0 if success else task.progress  # 保留失败任务的进度
                 if task_id in self._running_tasks:
                     del self._running_tasks[task_id]
                 logging.info(f"任务{'完成' if success else '失败'}: {task_id}")
 
-    def update_task(self, updated_task: DownloadTask) -> bool:
-        """更新任务状态（线程安全版）
-        
-        Args:
-            updated_task: 包含最新状态的任务对象
-            
-        Returns:
-            bool: 是否更新成功
+    def validate_task_update(self,task: DownloadTask, **kwargs):
         """
-        with self._lock:  # 保证线程安全
-            # 检查任务是否存在
-            existing_task = self._tasks.get(updated_task.task_id)
-            if not existing_task:
-                logging.warning(f"尝试更新不存在的任务: {updated_task.task_id}")
+        验证更新任务参数的合理性
+        Args:
+            task (DownloadTask): 要更新的任务对象
+            **kwargs: 任务参数字典
+        
+        Returns:
+            bool: 是否验证通过
+        """
+        if 'progress' in kwargs:
+            progress = kwargs['progress']
+            if not (0 <= progress <= 100):
+                self.logger.error(f"非法进度值: {progress},必须要在0~100之间")
                 return False
             
-            # 保留不可变字段（创建时间等）
-            updated_task.created_at = existing_task.created_at
+        if 'status' in kwargs:
+            status = kwargs['status']
+            self.logger.debug(f"状态值: {status}")
+            if status not in TaskStatus.__members__:
+                self.logger.error(f"非法状态值: {status}, 必须是TaskStatus的成员")
+                return False
+        
+        return True
             
-            # 同步所有可变字段
-            self._tasks[updated_task.task_id] = updated_task
+    def update_task(self, task_id: str,**kwargs) -> bool:
+        """
+            更新任务进度,状态及其他信息
+            Args:
+                task_id: 需要更新的任务ID
+                **kwargs: 需要更新的参数
+            Returns:
+                bool: 是否更新成功
+        """
+        with self._lock:
+            task = self._tasks.get(task_id)
+            if not task:
+                self.logger.warning(f"任务{task_id}不存在!")
+                return False
             
-            # 如果任务正在运行，同步更新运行中任务列表
-            if updated_task.task_id in self._running_tasks:
-                self._running_tasks[updated_task.task_id] = updated_task
+            if not self.validate_task_update(task, **kwargs):
+                self.logger.warning(f"任务{task_id}更新失败!,参数:{kwargs}")
+                return False
+
+            for key, value in kwargs.items():
+                # 目前只完成了进度与状态的更新
+                if key == 'progress':
+                    task.progress = round(value, 2)
+                elif key == 'status':
+                    task.status = TaskStatus[value]
+            task.last_updated = datetime.now()
+
+            if task_id in self._running_tasks:
+                self._running_tasks[task_id] = task
             
-            logging.debug(f"任务状态已更新: {updated_task.task_id}")
-            return True
+            self.logger.debug(f"任务{task_id}更新成功!,参数:{kwargs}")

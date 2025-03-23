@@ -56,14 +56,12 @@ class DownloadService:
                 # 如果没有任务，等待一段时间再检查
                 loop.run_until_complete(asyncio.sleep(1))
 
-    def _update_progress(self, task: DownloadTask, progress: float):
+    def _update_progress(self, task: DownloadTask, **kwargs):
         """更新任务进度到管理器"""
-        if time() - task.last_updated < 0.3:  # 每300ms更新一次
-            return
-        task.last_updated = time()
-        task.progress = round(progress, 2)
-        task.status = TaskStatus.DOWNLOADING
-        self.task_manager.update_task(task)            
+        #if time() - task.last_updated < 0.3:  # 每300ms更新一次
+            #return
+        #task.last_updated = time()
+        self.task_manager.update_task(task.task_id,**kwargs)         
     
     async def download_core(self, task: DownloadTask) -> None:
         """核心下载逻辑"""
@@ -73,6 +71,7 @@ class DownloadService:
         self.logger.debug(f"下载配置{task.download_config}")
         self.logger.debug(f"视频配置{task.video_config}")
         
+        self.task_manager.update_task(task.task_id,status=TaskStatus.PARSING.name)
         download_video = video.Video(bvid=bvid)
         downloadUrlData = await download_video.get_download_url(0)
         Detecter = video.VideoDownloadURLDataDetecter(data=downloadUrlData)
@@ -93,29 +92,53 @@ class DownloadService:
         self.logger.debug('获取流链接成功')
         
         if Detecter.check_flv_mp4_stream():
+
             self.logger.info(f"正在下载视频{downloadVideoName} 的Flv文件")
-            success, error_msg = await self.downloader.download(videoUrl, tempFlv, progress_callback=lambda p: self._update_progress(task, p))
+            self._update_progress(task,status = TaskStatus.DOWNLOADING_VIDEO.name)
+            success, error_msg = await self.downloader.download(
+                videoUrl, 
+                tempFlv, 
+                progress_callback=lambda progress: self._update_progress(task, progress=progress))
             if not success:
                 raise Exception(error_msg)
+            
             self.logger.debug('混流开始')
+            self._update_progress(task,status=TaskStatus.MERGING.name)
             await mix_streams(tempFlv, '', output)
         else:
             if task.video_config.audio_only == 'True':
                 self.logger.info("仅下载音频模式")
                 self.logger.info(f"正在下载视频 {downloadVideoName} 的音频流")
-                success, error_msg = await self.downloader.download(audioUrl, tempAudio, progress_callback=lambda p: self._update_progress(task, p))
+                self._update_progress(task,status = TaskStatus.DOWNLOADING_AUDIO.name)
+                success, error_msg = await self.downloader.download(
+                    audioUrl, 
+                    tempAudio, 
+                    progress_callback=lambda progress: self._update_progress(task, progress=progress))
                 if not success:
                     raise Exception(error_msg)
+                
                 self.logger.debug('混流开始')
+                self._update_progress(task,status=TaskStatus.MERGING.name)
                 await mix_streams('', tempAudio, output)
             else:
+                self._update_progress(task, status = TaskStatus.DOWNLOADING_VIDEO.name)
                 self.logger.info(f"正在下载视频 {downloadVideoName} 的视频流")
-                success, error_msg = await self.downloader.download(videoUrl, tempVideo, progress_callback=lambda p: self._update_progress(task, p))
+                success, error_msg = await self.downloader.download(
+                    videoUrl, 
+                    tempVideo, 
+                    progress_callback=lambda progress: self._update_progress(task, progress=progress))
                 if not success:
-                    raise Exception(error_msg)
+                    raise Exception(error_msg)     
+                           
+                self._update_progress(task, status=TaskStatus.DOWNLOADING_AUDIO.name)
                 self.logger.info(f"正在下载视频 {downloadVideoName} 的音频流")
-                success, error_msg = await self.downloader.download(audioUrl, tempAudio, progress_callback=lambda p: self._update_progress(task, p))
+                success, error_msg = await self.downloader.download(
+                    audioUrl, 
+                    tempAudio, 
+                    progress_callback=lambda progress: self._update_progress(task, progress=progress))
                 if not success:
                     raise Exception(error_msg)
+                
+                self._update_progress(task,status=TaskStatus.MERGING.name)
                 self.logger.debug('混流开始')
                 await mix_streams(tempVideo, tempAudio, output)
